@@ -1,0 +1,34 @@
+{
+  "name": "yx-export",
+  "version": "1.0.0",
+  "description": "印象笔记导出工具 - 将笔记导出为 Markdown 格式",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js"
+  },
+  "keywords": [
+    "evernote",
+    "yinxiang",
+    "markdown",
+    "export"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "enml-js": "^0.1.1",
+    "evernote": "^2.0.5",
+    "express": "^4.21.2",
+    "node-html-markdown": "^1.3.0",
+    "sanitize-filename": "^1.6.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>印象笔记导出工具</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>印象笔记导出工具</h1>
+      <p class="subtitle">将印象笔记导出为 Markdown 格式</p>
+    </header>
+
+    <!-- Token 配置区域 -->
+    <section id="auth-section" class="card">
+      <h2>1. 配置认证信息</h2>
+      <p class="help-text">
+        请先获取您的 Developer Token：
+        <a href="https://app.yinxiang.com/api/DeveloperToken.action" target="_blank">点击获取 Token</a>
+      </p>
+      <div class="form-group">
+        <label for="token">Developer Token</label>
+        <input type="password" id="token" placeholder="粘贴您的 Developer Token">
+      </div>
+      <div class="form-group">
+        <label for="noteStoreUrl">NoteStore URL</label>
+        <input type="text" id="noteStoreUrl" placeholder="例如: https://app.yinxiang.com/shard/s1/notestore">
+      </div>
+      <div class="form-actions">
+        <button id="verifyBtn" class="btn btn-primary">验证 Token</button>
+        <span id="authStatus" class="status"></span>
+      </div>
+    </section>
+
+    <!-- 笔记本和笔记选择区域 -->
+    <section id="select-section" class="card" style="display: none;">
+      <h2>2. 选择要导出的内容</h2>
+      <div class="columns">
+        <div class="column">
+          <h3>笔记本</h3>
+          <div id="notebookList" class="list-container">
+            <p class="placeholder">请先验证 Token</p>
+          </div>
+        </div>
+        <div class="column">
+          <h3>笔记 <span id="noteCount"></span></h3>
+          <div class="list-header">
+            <label>
+              <input type="checkbox" id="selectAllNotes"> 全选
+            </label>
+          </div>
+          <div id="noteList" class="list-container">
+            <p class="placeholder">请选择一个笔记本</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 导出选项区域 -->
+    <section id="export-section" class="card" style="display: none;">
+      <h2>3. 导出设置</h2>
+      <div class="form-group">
+        <label>图片引用格式</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="imageFormat" value="obsidian" checked>
+            Obsidian 格式: <code>![[images/image.png]]</code>
+          </label>
+          <label>
+            <input type="radio" name="imageFormat" value="standard">
+            标准 Markdown: <code>![](./images/image.png)</code>
+          </label>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button id="exportNotebookBtn" class="btn btn-primary" disabled>导出整个笔记本</button>
+        <button id="exportSelectedBtn" class="btn btn-secondary" disabled>导出选中笔记</button>
+      </div>
+    </section>
+
+    <!-- 进度显示区域 -->
+    <section id="progress-section" class="card" style="display: none;">
+      <h2>导出进度</h2>
+      <div class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+      <p id="progressText" class="progress-text">准备导出...</p>
+      <div id="exportResult" class="result" style="display: none;">
+        <p id="resultMessage"></p>
+        <button id="downloadBtn" class="btn btn-success">下载 ZIP 文件</button>
+      </div>
+    </section>
+
+    <footer>
+      <p>数据仅在本地处理，不会上传到任何服务器</p>
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
