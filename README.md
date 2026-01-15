@@ -31,7 +31,7 @@
 ### 2. 安装依赖
 
 ```bash
-cd yx-export
+cd yinxiang-note-export
 npm install
 ```
 

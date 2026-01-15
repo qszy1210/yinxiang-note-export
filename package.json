@@ -1,5 +1,5 @@
 {
-  "name": "yx-export",
+  "name": "yinxiang-note-export",
   "version": "1.0.0",
   "description": "印象笔记导出工具 - 将笔记导出为 Markdown 格式",
   "main": "server/index.js",
