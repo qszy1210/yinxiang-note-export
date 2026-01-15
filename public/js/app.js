@@ -7,24 +7,41 @@ const state = {
   currentNotebook: null,
   notes: [],
   selectedNotes: new Set(),
-  exportPath: ''
+  exportPath: '',
+  // 搜索状态
+  notebookSearchQuery: '',
+  noteSearchQuery: '',
+  filteredNotebooks: [],
+  filteredNotes: []
 };
 
 // DOM 元素
 const elements = {
+  // Tab
+  tabBtns: document.querySelectorAll('.tab-btn'),
+  tabPanels: document.querySelectorAll('.tab-panel'),
+  exportTab: document.querySelector('[data-tab="export"]'),
+  // 配置
   token: document.getElementById('token'),
   noteStoreUrl: document.getElementById('noteStoreUrl'),
+  toggleToken: document.getElementById('toggleToken'),
   verifyBtn: document.getElementById('verifyBtn'),
   authStatus: document.getElementById('authStatus'),
-  selectSection: document.getElementById('select-section'),
-  exportSection: document.getElementById('export-section'),
-  progressSection: document.getElementById('progress-section'),
+  configHint: document.getElementById('configHint'),
+  // 搜索
+  notebookSearch: document.getElementById('notebookSearch'),
+  clearNotebookSearch: document.getElementById('clearNotebookSearch'),
+  noteSearch: document.getElementById('noteSearch'),
+  clearNoteSearch: document.getElementById('clearNoteSearch'),
+  // 导出
   notebookList: document.getElementById('notebookList'),
   noteList: document.getElementById('noteList'),
   noteCount: document.getElementById('noteCount'),
   selectAllNotes: document.getElementById('selectAllNotes'),
   exportNotebookBtn: document.getElementById('exportNotebookBtn'),
   exportSelectedBtn: document.getElementById('exportSelectedBtn'),
+  // 进度
+  progressCard: document.getElementById('progressCard'),
   progressFill: document.getElementById('progressFill'),
   progressText: document.getElementById('progressText'),
   exportResult: document.getElementById('exportResult'),
@@ -33,21 +50,245 @@ const elements = {
 };
 
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {
-  // 尝试从 localStorage 恢复配置
-  const savedToken = localStorage.getItem('yx_token');
-  const savedNoteStoreUrl = localStorage.getItem('yx_notestore_url');
+document.addEventListener('DOMContentLoaded', async () => {
+  // 绑定 Tab 切换事件
+  elements.tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
 
-  if (savedToken) elements.token.value = savedToken;
-  if (savedNoteStoreUrl) elements.noteStoreUrl.value = savedNoteStoreUrl;
+  // 绑定 Token 显示/隐藏
+  elements.toggleToken.addEventListener('click', toggleTokenVisibility);
 
-  // 绑定事件
+  // 绑定验证按钮
   elements.verifyBtn.addEventListener('click', handleVerify);
   elements.selectAllNotes.addEventListener('change', handleSelectAll);
   elements.exportNotebookBtn.addEventListener('click', () => handleExport('notebook'));
   elements.exportSelectedBtn.addEventListener('click', () => handleExport('selected'));
   elements.downloadBtn.addEventListener('click', handleDownload);
+
+  // 绑定搜索事件
+  elements.notebookSearch.addEventListener('input', handleNotebookSearch);
+  elements.clearNotebookSearch.addEventListener('click', clearNotebookSearch);
+  elements.noteSearch.addEventListener('input', handleNoteSearch);
+  elements.clearNoteSearch.addEventListener('click', clearNoteSearch);
+
+  // 加载配置
+  await loadConfig();
 });
+
+// ==================== 搜索功能 ====================
+
+/**
+ * 模糊搜索匹配
+ * 支持：拼音首字母、部分匹配、忽略大小写
+ */
+function fuzzyMatch(text, query) {
+  if (!query) return { matched: true, score: 0 };
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+
+  // 精确包含匹配（得分最高）
+  if (lowerText.includes(lowerQuery)) {
+    const index = lowerText.indexOf(lowerQuery);
+    return {
+      matched: true,
+      score: 100 - index,
+      ranges: [[index, index + query.length]]
+    };
+  }
+
+  // 模糊匹配：检查查询字符是否按顺序出现在文本中
+  let queryIndex = 0;
+  let textIndex = 0;
+  const ranges = [];
+  let currentRange = null;
+
+  while (queryIndex < lowerQuery.length && textIndex < lowerText.length) {
+    if (lowerText[textIndex] === lowerQuery[queryIndex]) {
+      if (currentRange === null) {
+        currentRange = [textIndex, textIndex + 1];
+      } else {
+        currentRange[1] = textIndex + 1;
+      }
+      queryIndex++;
+    } else if (currentRange !== null) {
+      ranges.push(currentRange);
+      currentRange = null;
+    }
+    textIndex++;
+  }
+
+  if (currentRange !== null) {
+    ranges.push(currentRange);
+  }
+
+  if (queryIndex === lowerQuery.length) {
+    // 计算得分：连续匹配越多得分越高
+    const continuity = ranges.length === 1 ? 50 : Math.max(0, 50 - ranges.length * 10);
+    return { matched: true, score: continuity, ranges };
+  }
+
+  return { matched: false, score: 0 };
+}
+
+/**
+ * 高亮匹配文本
+ */
+function highlightText(text, ranges) {
+  if (!ranges || ranges.length === 0) return escapeHtml(text);
+
+  let result = '';
+  let lastIndex = 0;
+
+  ranges.forEach(([start, end]) => {
+    result += escapeHtml(text.substring(lastIndex, start));
+    result += `<span class="highlight">${escapeHtml(text.substring(start, end))}</span>`;
+    lastIndex = end;
+  });
+
+  result += escapeHtml(text.substring(lastIndex));
+  return result;
+}
+
+/**
+ * 处理笔记本搜索
+ */
+function handleNotebookSearch() {
+  const query = elements.notebookSearch.value.trim();
+  state.notebookSearchQuery = query;
+
+  // 显示/隐藏清除按钮
+  elements.clearNotebookSearch.classList.toggle('visible', query.length > 0);
+
+  // 过滤笔记本
+  filterNotebooks();
+  renderNotebooks();
+}
+
+function clearNotebookSearch() {
+  elements.notebookSearch.value = '';
+  state.notebookSearchQuery = '';
+  elements.clearNotebookSearch.classList.remove('visible');
+  filterNotebooks();
+  renderNotebooks();
+}
+
+function filterNotebooks() {
+  const query = state.notebookSearchQuery;
+
+  if (!query) {
+    state.filteredNotebooks = state.notebooks.map(nb => ({
+      ...nb,
+      matchResult: { matched: true, score: 0 }
+    }));
+    return;
+  }
+
+  state.filteredNotebooks = state.notebooks
+    .map(nb => {
+      const matchResult = fuzzyMatch(nb.name, query);
+      // 也匹配 stack 名称
+      const stackMatch = nb.stack ? fuzzyMatch(nb.stack, query) : { matched: false, score: 0 };
+      const bestMatch = matchResult.score >= stackMatch.score ? matchResult : stackMatch;
+      return { ...nb, matchResult: bestMatch };
+    })
+    .filter(nb => nb.matchResult.matched)
+    .sort((a, b) => b.matchResult.score - a.matchResult.score);
+}
+
+/**
+ * 处理笔记搜索
+ */
+function handleNoteSearch() {
+  const query = elements.noteSearch.value.trim();
+  state.noteSearchQuery = query;
+
+  // 显示/隐藏清除按钮
+  elements.clearNoteSearch.classList.toggle('visible', query.length > 0);
+
+  // 过滤笔记
+  filterNotes();
+  renderNotes();
+}
+
+function clearNoteSearch() {
+  elements.noteSearch.value = '';
+  state.noteSearchQuery = '';
+  elements.clearNoteSearch.classList.remove('visible');
+  filterNotes();
+  renderNotes();
+}
+
+function filterNotes() {
+  const query = state.noteSearchQuery;
+
+  if (!query) {
+    state.filteredNotes = state.notes.map(note => ({
+      ...note,
+      matchResult: { matched: true, score: 0 }
+    }));
+    return;
+  }
+
+  state.filteredNotes = state.notes
+    .map(note => {
+      const matchResult = fuzzyMatch(note.title, query);
+      return { ...note, matchResult };
+    })
+    .filter(note => note.matchResult.matched)
+    .sort((a, b) => b.matchResult.score - a.matchResult.score);
+}
+
+// ==================== 原有功能 ====================
+
+// 加载服务器配置
+async function loadConfig() {
+  try {
+    const response = await fetch('/api/auth/config');
+    const data = await response.json();
+
+    if (data.hasConfig) {
+      // 服务器有配置，使用服务器配置
+      elements.token.value = data.token || '';
+      elements.noteStoreUrl.value = data.noteStoreUrl || '';
+      elements.configHint.style.display = 'block';
+    } else {
+      // 尝试从 localStorage 恢复
+      const savedToken = localStorage.getItem('yx_token');
+      const savedNoteStoreUrl = localStorage.getItem('yx_notestore_url');
+
+      if (savedToken) elements.token.value = savedToken;
+      if (savedNoteStoreUrl) elements.noteStoreUrl.value = savedNoteStoreUrl;
+    }
+  } catch (err) {
+    console.error('加载配置失败:', err);
+    // 回退到 localStorage
+    const savedToken = localStorage.getItem('yx_token');
+    const savedNoteStoreUrl = localStorage.getItem('yx_notestore_url');
+
+    if (savedToken) elements.token.value = savedToken;
+    if (savedNoteStoreUrl) elements.noteStoreUrl.value = savedNoteStoreUrl;
+  }
+}
+
+// Tab 切换
+function switchTab(tabName) {
+  elements.tabBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+
+  elements.tabPanels.forEach(panel => {
+    panel.classList.toggle('active', panel.id === `tab-${tabName}`);
+  });
+}
+
+// 切换 Token 显示/隐藏
+function toggleTokenVisibility() {
+  const type = elements.token.type === 'password' ? 'text' : 'password';
+  elements.token.type = type;
+  elements.toggleToken.textContent = type === 'password' ? '👁' : '🙈';
+}
 
 // 验证 Token
 async function handleVerify() {
@@ -82,9 +323,11 @@ async function handleVerify() {
 
       showStatus(`验证成功，欢迎 ${data.user.name || data.user.username}`, 'success');
 
-      // 显示选择区域
-      elements.selectSection.style.display = 'block';
-      elements.exportSection.style.display = 'block';
+      // 启用导出 Tab
+      elements.exportTab.disabled = false;
+
+      // 切换到导出 Tab
+      switchTab('export');
 
       // 加载笔记本列表
       await loadNotebooks();
@@ -100,6 +343,8 @@ async function handleVerify() {
 
 // 加载笔记本列表
 async function loadNotebooks() {
+  elements.notebookList.innerHTML = '<p class="placeholder">加载中...</p>';
+
   try {
     const response = await fetch('/api/notebooks', {
       headers: getAuthHeaders()
@@ -109,17 +354,26 @@ async function loadNotebooks() {
 
     if (data.success) {
       state.notebooks = data.notebooks;
+      filterNotebooks();
       renderNotebooks();
     }
   } catch (err) {
+    elements.notebookList.innerHTML = '<p class="placeholder">加载失败</p>';
     console.error('加载笔记本失败:', err);
   }
 }
 
 // 渲染笔记本列表
 function renderNotebooks() {
+  const notebooks = state.filteredNotebooks;
+
   if (state.notebooks.length === 0) {
     elements.notebookList.innerHTML = '<p class="placeholder">没有找到笔记本</p>';
+    return;
+  }
+
+  if (notebooks.length === 0) {
+    elements.notebookList.innerHTML = `<p class="no-results">没有匹配 "${escapeHtml(state.notebookSearchQuery)}" 的笔记本</p>`;
     return;
   }
 
@@ -127,7 +381,7 @@ function renderNotebooks() {
   const stacks = new Map();
   const noStack = [];
 
-  state.notebooks.forEach(nb => {
+  notebooks.forEach(nb => {
     if (nb.stack) {
       if (!stacks.has(nb.stack)) stacks.set(nb.stack, []);
       stacks.get(nb.stack).push(nb);
@@ -144,25 +398,30 @@ function renderNotebooks() {
   });
 
   // 再按 stack 显示
-  stacks.forEach((notebooks, stackName) => {
-    html += `<div class="stack-header">${stackName}</div>`;
-    notebooks.forEach(nb => {
-      html += createNotebookItem(nb);
+  stacks.forEach((stackNotebooks, stackName) => {
+    html += `<div class="list-item stack-header" style="background: #f0f0f0; font-weight: 500; cursor: default;">${escapeHtml(stackName)}</div>`;
+    stackNotebooks.forEach(nb => {
+      html += createNotebookItem(nb, true);
     });
   });
 
   elements.notebookList.innerHTML = html;
 
   // 绑定点击事件
-  elements.notebookList.querySelectorAll('.list-item').forEach(item => {
+  elements.notebookList.querySelectorAll('.list-item[data-guid]').forEach(item => {
     item.addEventListener('click', () => handleNotebookClick(item.dataset.guid));
   });
 }
 
-function createNotebookItem(notebook) {
+function createNotebookItem(notebook, indent = false) {
+  const style = indent ? 'padding-left: 28px;' : '';
+  const isActive = state.currentNotebook?.guid === notebook.guid;
+  const activeClass = isActive ? 'active' : '';
+  const titleHtml = highlightText(notebook.name, notebook.matchResult?.ranges);
+
   return `
-    <div class="list-item" data-guid="${notebook.guid}">
-      <span class="title">${escapeHtml(notebook.name)}</span>
+    <div class="list-item ${activeClass}" data-guid="${notebook.guid}" style="${style}">
+      <span class="title">${titleHtml}</span>
     </div>
   `;
 }
@@ -170,13 +429,18 @@ function createNotebookItem(notebook) {
 // 处理笔记本点击
 async function handleNotebookClick(notebookGuid) {
   // 更新选中状态
-  elements.notebookList.querySelectorAll('.list-item').forEach(item => {
+  elements.notebookList.querySelectorAll('.list-item[data-guid]').forEach(item => {
     item.classList.toggle('active', item.dataset.guid === notebookGuid);
   });
 
   state.currentNotebook = state.notebooks.find(nb => nb.guid === notebookGuid);
   state.selectedNotes.clear();
   elements.selectAllNotes.checked = false;
+
+  // 清除笔记搜索
+  elements.noteSearch.value = '';
+  state.noteSearchQuery = '';
+  elements.clearNoteSearch.classList.remove('visible');
 
   // 加载笔记列表
   elements.noteList.innerHTML = '<p class="placeholder">加载中...</p>';
@@ -191,6 +455,7 @@ async function handleNotebookClick(notebookGuid) {
     if (data.success) {
       state.notes = data.notes;
       elements.noteCount.textContent = `(${data.totalNotes} 篇)`;
+      filterNotes();
       renderNotes();
       updateExportButtons();
     }
@@ -202,20 +467,29 @@ async function handleNotebookClick(notebookGuid) {
 
 // 渲染笔记列表
 function renderNotes() {
+  const notes = state.filteredNotes;
+
   if (state.notes.length === 0) {
     elements.noteList.innerHTML = '<p class="placeholder">该笔记本没有笔记</p>';
     return;
   }
 
+  if (notes.length === 0) {
+    elements.noteList.innerHTML = `<p class="no-results">没有匹配 "${escapeHtml(state.noteSearchQuery)}" 的笔记</p>`;
+    return;
+  }
+
   let html = '';
-  state.notes.forEach(note => {
+  notes.forEach(note => {
     const checked = state.selectedNotes.has(note.guid) ? 'checked' : '';
     const date = new Date(note.updated).toLocaleDateString();
+    const titleHtml = highlightText(note.title, note.matchResult?.ranges);
+
     html += `
       <div class="list-item ${checked ? 'selected' : ''}" data-guid="${note.guid}">
         <input type="checkbox" ${checked}>
-        <span class="title">${escapeHtml(note.title)}</span>
-        <span class="count">${date}</span>
+        <span class="title">${titleHtml}</span>
+        <span class="meta">${date}</span>
       </div>
     `;
   });
@@ -246,17 +520,19 @@ function handleNoteToggle(noteGuid, checked) {
   const item = elements.noteList.querySelector(`[data-guid="${noteGuid}"]`);
   if (item) item.classList.toggle('selected', checked);
 
-  // 更新全选框状态
-  elements.selectAllNotes.checked = state.selectedNotes.size === state.notes.length;
+  // 更新全选框状态（基于当前筛选结果）
+  const filteredGuids = state.filteredNotes.map(n => n.guid);
+  const allFilteredSelected = filteredGuids.every(guid => state.selectedNotes.has(guid));
+  elements.selectAllNotes.checked = filteredGuids.length > 0 && allFilteredSelected;
 
   updateExportButtons();
 }
 
-// 全选/取消全选
+// 全选/取消全选（只针对当前筛选结果）
 function handleSelectAll() {
   const checked = elements.selectAllNotes.checked;
 
-  state.notes.forEach(note => {
+  state.filteredNotes.forEach(note => {
     if (checked) {
       state.selectedNotes.add(note.guid);
     } else {
@@ -278,7 +554,7 @@ function updateExportButtons() {
 async function handleExport(type) {
   const imageFormat = document.querySelector('input[name="imageFormat"]:checked').value;
 
-  elements.progressSection.style.display = 'block';
+  elements.progressCard.style.display = 'block';
   elements.exportResult.style.display = 'none';
   elements.progressFill.style.width = '0%';
   elements.progressText.textContent = '准备导出...';
@@ -298,7 +574,7 @@ async function handleExport(type) {
 
       for (const guid of guids) {
         const note = state.notes.find(n => n.guid === guid);
-        elements.progressText.textContent = `正在导出: ${note?.title || guid}`;
+        elements.progressText.textContent = `正在导出 (${completed + 1}/${guids.length}): ${note?.title || guid}`;
 
         try {
           const response = await fetch(`/api/export/note/${guid}`, {
@@ -392,3 +668,41 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// ==================== 测试用例 ====================
+// 可在浏览器控制台运行：testFuzzyMatch()
+window.testFuzzyMatch = function() {
+  const testCases = [
+    { text: '工作笔记', query: '工作', expected: true },
+    { text: '工作笔记', query: '笔记', expected: true },
+    { text: '工作笔记', query: '工笔', expected: true },
+    { text: '工作笔记', query: 'gzb', expected: false }, // 不支持拼音
+    { text: 'My Notes', query: 'note', expected: true },
+    { text: 'My Notes', query: 'mn', expected: true },
+    { text: 'Project 2024', query: '2024', expected: true },
+    { text: 'Hello World', query: 'hw', expected: true },
+    { text: 'Hello World', query: 'xyz', expected: false },
+    { text: '测试文档', query: '测文', expected: true },
+    { text: '测试文档', query: '', expected: true }, // 空查询匹配所有
+  ];
+
+  console.log('=== 模糊搜索测试 ===');
+  let passed = 0;
+  let failed = 0;
+
+  testCases.forEach(({ text, query, expected }) => {
+    const result = fuzzyMatch(text, query);
+    const success = result.matched === expected;
+
+    if (success) {
+      console.log(`✓ "${text}" + "${query}" => ${result.matched} (score: ${result.score})`);
+      passed++;
+    } else {
+      console.error(`✗ "${text}" + "${query}" => ${result.matched}, expected: ${expected}`);
+      failed++;
+    }
+  });
+
+  console.log(`\n总计: ${passed} 通过, ${failed} 失败`);
+  return { passed, failed };
+};

@@ -35,10 +35,15 @@ router.post('/verify', async (req, res, next) => {
 
 // GET /api/auth/config - 获取服务器配置的 Token (如果有)
 router.get('/config', (req, res) => {
-  const hasConfig = !!(process.env.EVERNOTE_TOKEN && process.env.EVERNOTE_NOTESTORE_URL);
+  const token = process.env.EVERNOTE_TOKEN;
+  const noteStoreUrl = process.env.EVERNOTE_NOTESTORE_URL;
+  const hasConfig = !!(token && noteStoreUrl);
+
   res.json({
     hasConfig,
-    noteStoreUrl: hasConfig ? process.env.EVERNOTE_NOTESTORE_URL : null
+    // 返回完整的配置信息供前端使用
+    token: hasConfig ? token : null,
+    noteStoreUrl: hasConfig ? noteStoreUrl : null
   });
 });
 

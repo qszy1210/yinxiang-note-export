@@ -13,88 +13,157 @@
       <p class="subtitle">将印象笔记导出为 Markdown 格式</p>
     </header>
 
-    <!-- Token 配置区域 -->
-    <section id="auth-section" class="card">
-      <h2>1. 配置认证信息</h2>
-      <p class="help-text">
-        请先获取您的 Developer Token：
-        <a href="https://app.yinxiang.com/api/DeveloperToken.action" target="_blank">点击获取 Token</a>
-      </p>
-      <div class="form-group">
-        <label for="token">Developer Token</label>
-        <input type="password" id="token" placeholder="粘贴您的 Developer Token">
-      </div>
-      <div class="form-group">
-        <label for="noteStoreUrl">NoteStore URL</label>
-        <input type="text" id="noteStoreUrl" placeholder="例如: https://app.yinxiang.com/shard/s1/notestore">
-      </div>
-      <div class="form-actions">
-        <button id="verifyBtn" class="btn btn-primary">验证 Token</button>
-        <span id="authStatus" class="status"></span>
-      </div>
-    </section>
+    <!-- Tab 导航 -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="config">配置</button>
+      <button class="tab-btn" data-tab="export" disabled>导出</button>
+      <button class="tab-btn" data-tab="help">帮助</button>
+    </nav>
 
-    <!-- 笔记本和笔记选择区域 -->
-    <section id="select-section" class="card" style="display: none;">
-      <h2>2. 选择要导出的内容</h2>
-      <div class="columns">
-        <div class="column">
-          <h3>笔记本</h3>
-          <div id="notebookList" class="list-container">
-            <p class="placeholder">请先验证 Token</p>
+    <!-- Tab 内容 -->
+    <div class="tab-content">
+      <!-- 配置 Tab -->
+      <section id="tab-config" class="tab-panel active">
+        <div class="card">
+          <h2>认证配置</h2>
+          <p class="help-text">
+            请先获取您的 Developer Token：
+            <a href="https://app.yinxiang.com/api/DeveloperToken.action" target="_blank">点击获取 Token</a>
+          </p>
+          <div class="form-group">
+            <label for="token">Developer Token</label>
+            <input type="password" id="token" placeholder="粘贴您的 Developer Token">
+            <button type="button" class="btn-icon" id="toggleToken" title="显示/隐藏">👁</button>
+          </div>
+          <div class="form-group">
+            <label for="noteStoreUrl">NoteStore URL</label>
+            <input type="text" id="noteStoreUrl" placeholder="例如: https://app.yinxiang.com/shard/s1/notestore">
+          </div>
+          <div class="form-actions">
+            <button id="verifyBtn" class="btn btn-primary">验证并连接</button>
+            <span id="authStatus" class="status"></span>
+          </div>
+          <p class="config-hint" id="configHint" style="display: none;">
+            提示：已从服务器配置中加载 Token
+          </p>
+        </div>
+      </section>
+
+      <!-- 导出 Tab -->
+      <section id="tab-export" class="tab-panel">
+        <div class="card">
+          <h2>选择笔记本</h2>
+          <div class="search-box">
+            <input type="text" id="notebookSearch" placeholder="搜索笔记本..." class="search-input">
+            <button type="button" id="clearNotebookSearch" class="search-clear" title="清除">&times;</button>
+          </div>
+          <div id="notebookList" class="list-container notebook-list">
+            <p class="placeholder">加载中...</p>
           </div>
         </div>
-        <div class="column">
-          <h3>笔记 <span id="noteCount"></span></h3>
+
+        <div class="card">
+          <h2>选择笔记 <span id="noteCount"></span></h2>
+          <div class="search-box">
+            <input type="text" id="noteSearch" placeholder="搜索笔记..." class="search-input">
+            <button type="button" id="clearNoteSearch" class="search-clear" title="清除">&times;</button>
+          </div>
           <div class="list-header">
             <label>
-              <input type="checkbox" id="selectAllNotes"> 全选
+              <input type="checkbox" id="selectAllNotes"> 全选当前筛选结果
             </label>
           </div>
-          <div id="noteList" class="list-container">
-            <p class="placeholder">请选择一个笔记本</p>
+          <div id="noteList" class="list-container note-list">
+            <p class="placeholder">请先选择一个笔记本</p>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- 导出选项区域 -->
-    <section id="export-section" class="card" style="display: none;">
-      <h2>3. 导出设置</h2>
-      <div class="form-group">
-        <label>图片引用格式</label>
-        <div class="radio-group">
-          <label>
-            <input type="radio" name="imageFormat" value="obsidian" checked>
-            Obsidian 格式: <code>![[images/image.png]]</code>
-          </label>
-          <label>
-            <input type="radio" name="imageFormat" value="standard">
-            标准 Markdown: <code>![](./images/image.png)</code>
-          </label>
+        <div class="card">
+          <h2>导出设置</h2>
+          <div class="form-group">
+            <label>图片引用格式</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="imageFormat" value="obsidian" checked>
+                <span>Obsidian 格式</span>
+                <code>![[images/image.png]]</code>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="imageFormat" value="standard">
+                <span>标准 Markdown</span>
+                <code>![](./images/image.png)</code>
+              </label>
+            </div>
+          </div>
+          <div class="form-actions export-actions">
+            <button id="exportNotebookBtn" class="btn btn-primary" disabled>导出整个笔记本</button>
+            <button id="exportSelectedBtn" class="btn btn-secondary" disabled>导出选中笔记</button>
+          </div>
         </div>
-      </div>
-      <div class="form-actions">
-        <button id="exportNotebookBtn" class="btn btn-primary" disabled>导出整个笔记本</button>
-        <button id="exportSelectedBtn" class="btn btn-secondary" disabled>导出选中笔记</button>
-      </div>
-    </section>
 
-    <!-- 进度显示区域 -->
-    <section id="progress-section" class="card" style="display: none;">
-      <h2>导出进度</h2>
-      <div class="progress-bar">
-        <div id="progressFill" class="progress-fill"></div>
-      </div>
-      <p id="progressText" class="progress-text">准备导出...</p>
-      <div id="exportResult" class="result" style="display: none;">
-        <p id="resultMessage"></p>
-        <button id="downloadBtn" class="btn btn-success">下载 ZIP 文件</button>
-      </div>
-    </section>
+        <!-- 进度显示 -->
+        <div id="progressCard" class="card" style="display: none;">
+          <h2>导出进度</h2>
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <p id="progressText" class="progress-text">准备导出...</p>
+          <div id="exportResult" class="result" style="display: none;">
+            <p id="resultMessage"></p>
+            <button id="downloadBtn" class="btn btn-success">下载 ZIP 文件</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 帮助 Tab -->
+      <section id="tab-help" class="tab-panel">
+        <div class="card">
+          <h2>如何获取 Developer Token</h2>
+          <ol class="help-steps">
+            <li>登录印象笔记网页版</li>
+            <li>访问 <a href="https://app.yinxiang.com/api/DeveloperToken.action" target="_blank">Developer Token 页面</a></li>
+            <li>点击 "Create a developer token" 按钮</li>
+            <li>复制生成的 <strong>Developer Token</strong> 和 <strong>NoteStore URL</strong></li>
+          </ol>
+          <div class="warning">
+            <strong>注意：</strong>请妥善保管您的 Token，不要泄露给他人。
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>使用本地配置文件</h2>
+          <p>您也可以将 Token 配置在服务器的 <code>.env</code> 文件中，这样每次启动时会自动加载：</p>
+          <ol class="help-steps">
+            <li>复制 <code>.env.example</code> 为 <code>.env</code></li>
+            <li>编辑 <code>.env</code> 文件，填入您的 Token 和 NoteStore URL</li>
+            <li>重新启动服务</li>
+          </ol>
+          <pre class="code-block">EVERNOTE_TOKEN=your_token_here
+EVERNOTE_NOTESTORE_URL=https://app.yinxiang.com/shard/s1/notestore</pre>
+        </div>
+
+        <div class="card">
+          <h2>导出格式说明</h2>
+          <p><strong>Obsidian 格式：</strong>使用 <code>![[images/xxx.png]]</code> 语法，适合在 Obsidian 中使用。</p>
+          <p><strong>标准 Markdown：</strong>使用 <code>![](./images/xxx.png)</code> 语法，兼容大多数 Markdown 编辑器。</p>
+        </div>
+
+        <div class="card">
+          <h2>常见问题</h2>
+          <dl class="faq">
+            <dt>Token 验证失败？</dt>
+            <dd>确保 Token 没有过期或被撤销，确认 NoteStore URL 格式正确。</dd>
+            <dt>导出速度慢？</dt>
+            <dd>印象笔记 API 有调用频率限制，程序会自动控制请求速度。包含大量图片的笔记需要更多下载时间。</dd>
+            <dt>部分内容无法导出？</dt>
+            <dd>加密内容无法导出，会显示为提示文字。复杂表格可能格式不完美。</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
 
     <footer>
-      <p>数据仅在本地处理，不会上传到任何服务器</p>
+      <p>数据仅在本地处理，不会上传到任何外部服务器</p>
     </footer>
   </div>
 
