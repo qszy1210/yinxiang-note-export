@@ -5,8 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>印象笔记导出工具</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/layout.css">
 </head>
 <body>
+  <!-- 设置展示区域（右上角） -->
+  <div class="settings-bar" id="settingsBar">
+    <div class="settings-trigger" id="settingsTrigger">
+      <span class="settings-icon">⚙️</span>
+      <span class="settings-label">设置</span>
+    </div>
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-header">
+        <span>设置</span>
+        <button class="settings-close" id="settingsClose">×</button>
+      </div>
+      <div class="settings-content" id="settingsContent">
+        <p class="settings-loading">加载中...</p>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <header>
       <h1>印象笔记导出工具</h1>
@@ -15,102 +33,138 @@
 
     <!-- Tab 导航 -->
     <nav class="tabs">
-      <button class="tab-btn active" data-tab="config">配置</button>
-      <button class="tab-btn" data-tab="export" disabled>导出</button>
+      <button class="tab-btn active" data-tab="export">导出</button>
+      <button class="tab-btn" data-tab="organize">整理</button>
       <button class="tab-btn" data-tab="help">帮助</button>
     </nav>
 
     <!-- Tab 内容 -->
     <div class="tab-content">
-      <!-- 配置 Tab -->
-      <section id="tab-config" class="tab-panel active">
-        <div class="card">
-          <h2>认证配置</h2>
-          <p class="help-text">
-            请先获取您的 Developer Token：
-            <a href="https://app.yinxiang.com/api/DeveloperToken.action" target="_blank">点击获取 Token</a>
-          </p>
-          <div class="form-group">
-            <label for="token">Developer Token</label>
-            <input type="password" id="token" placeholder="粘贴您的 Developer Token">
-            <button type="button" class="btn-icon" id="toggleToken" title="显示/隐藏">👁</button>
+      <!-- 导出 Tab -->
+      <section id="tab-export" class="tab-panel">
+        <div class="export-layout">
+          <!-- 左侧：笔记本列表 -->
+          <div class="export-sidebar">
+            <div class="card">
+              <h2>选择笔记本</h2>
+
+              <!-- 添加刷新按钮区域 -->
+              <div class="batch-actions" style="margin-bottom: 12px;">
+                <button id="loadNotebooksBtn" class="btn btn-secondary btn-small">加载笔记本</button>
+              </div>
+
+              <div class="list-header">
+                <label>
+                  <input type="checkbox" id="selectNotebooks"> 全选笔记本
+                </label>
+              </div>
+              <div class="search-box">
+                <input type="text" id="notebookSearch" placeholder="搜索笔记本..." class="search-input">
+                <button type="button" id="clearNotebookSearch" class="search-clear" title="清除">&times;</button>
+              </div>
+
+              <!-- 错误提示区域 -->
+              <div id="notebooksErrorMsg" class="error-message" style="display: none;"></div>
+
+              <div id="notebookList" class="list-container notebook-list">
+                <p class="placeholder">点击"加载笔记本"开始</p>
+              </div>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="noteStoreUrl">NoteStore URL</label>
-            <input type="text" id="noteStoreUrl" placeholder="例如: https://app.yinxiang.com/shard/s1/notestore">
+
+          <!-- 右侧：笔记列表 -->
+          <div class="export-main">
+            <div class="card">
+              <h2>选择笔记 <span id="noteCount"></span></h2>
+              <div class="search-box">
+                <input type="text" id="noteSearch" placeholder="搜索笔记..." class="search-input">
+                <button type="button" id="clearNoteSearch" class="search-clear" title="清除">&times;</button>
+              </div>
+              <div class="list-header">
+                <label>
+                  <input type="checkbox" id="selectAllNotes"> 全选当前筛选结果
+                </label>
+              </div>
+              <div id="noteList" class="list-container note-list">
+                <p class="placeholder">请先选择笔记本</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>导出设置</h2>
+              <div class="form-group">
+                <label>图片引用格式</label>
+                <div class="radio-group">
+                  <label class="radio-label">
+                    <input type="radio" name="imageFormat" value="obsidian" checked>
+                    <span>Obsidian 格式</span>
+                    <code>![[images/image.png]]</code>
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" name="imageFormat" value="standard">
+                    <span>标准 Markdown</span>
+                    <code>![](./images/image.png)</code>
+                  </label>
+                </div>
+              </div>
+              <div class="form-actions export-actions">
+                <button id="exportNotebookBtn" class="btn btn-primary" disabled>导出整个笔记本</button>
+                <button id="exportSelectedBtn" class="btn btn-secondary" disabled>导出选中</button>
+              </div>
+            </div>
+
+            <!-- 进度显示 -->
+            <div id="progressCard" class="card" style="display: none;">
+              <h2>导出进度</h2>
+              <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+              </div>
+              <p id="progressText" class="progress-text">准备导出...</p>
+              <div id="exportResult" class="result" style="display: none;">
+                <p id="resultMessage"></p>
+                <button id="downloadBtn" class="btn btn-success">下载 ZIP 文件</button>
+              </div>
+            </div>
           </div>
-          <div class="form-actions">
-            <button id="verifyBtn" class="btn btn-primary">验证并连接</button>
-            <span id="authStatus" class="status"></span>
-          </div>
-          <p class="config-hint" id="configHint" style="display: none;">
-            提示：已从服务器配置中加载 Token
-          </p>
         </div>
       </section>
 
-      <!-- 导出 Tab -->
-      <section id="tab-export" class="tab-panel">
+      <!-- 整理 Tab -->
+      <section id="tab-organize" class="tab-panel">
         <div class="card">
-          <h2>选择笔记本</h2>
-          <div class="search-box">
-            <input type="text" id="notebookSearch" placeholder="搜索笔记本..." class="search-input">
-            <button type="button" id="clearNotebookSearch" class="search-clear" title="清除">&times;</button>
-          </div>
-          <div id="notebookList" class="list-container notebook-list">
-            <p class="placeholder">加载中...</p>
-          </div>
-        </div>
+          <h2>标签管理</h2>
 
-        <div class="card">
-          <h2>选择笔记 <span id="noteCount"></span></h2>
-          <div class="search-box">
-            <input type="text" id="noteSearch" placeholder="搜索笔记..." class="search-input">
-            <button type="button" id="clearNoteSearch" class="search-clear" title="清除">&times;</button>
+          <div class="batch-actions">
+            <button id="loadTagsBtn" class="btn btn-secondary btn-small">加载标签</button>
+            <button id="findEmptyTagsBtn" class="btn btn-secondary btn-small">查找空标签</button>
+            <button id="deleteSelectedTagsBtn" class="btn btn-danger btn-small" disabled>删除选中标签</button>
           </div>
+
+          <!-- 警告提示 -->
+          <div class="warning" style="margin-top: 12px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 13px;">
+            <strong>⚠️ 注意：</strong>"查找空标签"功能需要逐个检查每个标签，可能触发大量 API 请求。如果标签数量较多，可能会触发 Evernote API 限流。建议仅在必要时使用。
+          </div>
+
           <div class="list-header">
             <label>
-              <input type="checkbox" id="selectAllNotes"> 全选当前筛选结果
+              <input type="checkbox" id="selectAllTags"> 全选
             </label>
           </div>
-          <div id="noteList" class="list-container note-list">
-            <p class="placeholder">请先选择一个笔记本</p>
-          </div>
-        </div>
 
-        <div class="card">
-          <h2>导出设置</h2>
-          <div class="form-group">
-            <label>图片引用格式</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" name="imageFormat" value="obsidian" checked>
-                <span>Obsidian 格式</span>
-                <code>![[images/image.png]]</code>
-              </label>
-              <label class="radio-label">
-                <input type="radio" name="imageFormat" value="standard">
-                <span>标准 Markdown</span>
-                <code>![](./images/image.png)</code>
-              </label>
-            </div>
+          <div class="search-box">
+            <input type="text" id="tagSearch" placeholder="搜索标签..." class="search-input">
+            <button type="button" id="clearTagSearch" class="search-clear" title="清除">&times;</button>
           </div>
-          <div class="form-actions export-actions">
-            <button id="exportNotebookBtn" class="btn btn-primary" disabled>导出整个笔记本</button>
-            <button id="exportSelectedBtn" class="btn btn-secondary" disabled>导出选中笔记</button>
-          </div>
-        </div>
 
-        <!-- 进度显示 -->
-        <div id="progressCard" class="card" style="display: none;">
-          <h2>导出进度</h2>
-          <div class="progress-bar">
-            <div id="progressFill" class="progress-fill"></div>
+          <!-- 错误提示区域 -->
+          <div id="tagsErrorMsg" class="error-message" style="display: none;"></div>
+
+          <div id="tagList" class="list-container tag-list">
+            <p class="placeholder">点击"加载标签"开始</p>
           </div>
-          <p id="progressText" class="progress-text">准备导出...</p>
-          <div id="exportResult" class="result" style="display: none;">
-            <p id="resultMessage"></p>
-            <button id="downloadBtn" class="btn btn-success">下载 ZIP 文件</button>
+
+          <div class="selection-summary">
+            <span id="tagSelectionInfo"></span>
           </div>
         </div>
       </section>
@@ -167,6 +221,16 @@ EVERNOTE_NOTESTORE_URL=https://app.yinxiang.com/shard/s1/notestore</pre>
     </footer>
   </div>
 
+  <!-- 模块化脚本加载顺序 -->
+  <script src="js/utils/helpers.js"></script>
+  <script src="js/utils/dom.js"></script>
+  <script src="js/modules/state.module.js"></script>
+  <script src="js/modules/api.module.js"></script>
+  <script src="js/modules/settings.module.js"></script>
+  <script src="js/modules/config.module.js"></script>
+  <script src="js/modules/export.module.js"></script>
+  <script src="js/modules/organize.module.js"></script>
+  <script src="js/modules/ui.module.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

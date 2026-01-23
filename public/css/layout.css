@@ -1,0 +1,136 @@
+/**
+ * 布局样式
+ * 导出功能的左右分栏布局
+ */
+
+/* 导出 Tab 左右布局 */
+.export-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  min-height: 500px;
+}
+
+.export-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.export-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 笔记本多选样式 */
+.notebook-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.notebook-item:hover {
+  background-color: #f8f9fa;
+}
+
+.notebook-item input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+.notebook-item.selected {
+  background-color: #e8f5e9;
+}
+
+/* 笔记本 stack 标题 */
+.stack-header {
+  background: #f0f0f0;
+  font-weight: 500;
+  cursor: default;
+  padding: 8px 14px;
+  border-bottom: 1px solid #e0e0e0;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+/* 笔记列表高度优化 */
+.note-list {
+  height: 350px;
+}
+
+.notebook-list {
+  height: 200px;
+}
+
+/* 批量操作按钮 */
+.batch-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #c82333;
+}
+
+/* 选择信息 */
+.selection-summary {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #666;
+  min-height: 20px;
+}
+
+.selection-summary.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.selection-summary.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* 标签列表 */
+.tag-list {
+  height: 300px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .export-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .note-list {
+    height: 250px;
+  }
+
+  .notebook-list {
+    height: 180px;
+  }
+
+  .batch-actions {
+    flex-direction: column;
+  }
+
+  .btn-small {
+    width: 100%;
+  }
+}
