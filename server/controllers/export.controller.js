@@ -221,11 +221,12 @@ class ExportController {
       logger.info('Starting batch export', { notebookCount: notebookGuids.length, imageFormat });
 
       // 生成任务 ID
-      const taskId = exportTracker.createTask(Date.now().toString(), {
+      const taskObj = exportTracker.createTask(Date.now().toString(), {
         type: 'multiple-notebooks',
         notebookGuids,
         imageFormat
       });
+      const taskId = taskObj.id;
 
       // 异步处理导出
       this._processBatchExport(taskId, notebookGuids, req.auth, { imageFormat })

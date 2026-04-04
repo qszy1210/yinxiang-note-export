@@ -535,9 +535,9 @@ const ExportModule = (function() {
         // 使用批量导出接口
         const result = await API.export.batch(selectedNotebooks, imageFormat);
 
-        if (result.taskId) {
+        if (result.data?.taskId) {
           // 轮询进度
-          await pollExportProgress(result.taskId);
+          await pollExportProgress(result.data.taskId);
         }
       } else if (selectedNotes.length > 0) {
         // 逐个导出笔记

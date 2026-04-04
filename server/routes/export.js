@@ -18,10 +18,10 @@ router.post('/note/:guid', exportController.exportNote);
 router.post('/notebook/:guid', exportController.exportNotebook);
 
 // POST /api/export/batch - 多笔记本批量导出（新增）
-router.post('/batch', exportController.exportBatch);
+router.post('/batch', exportController.exportBatch.bind(exportController));
 
 // GET /api/export/progress/:taskId - 获取导出任务进度（新增）
-router.get('/progress/:taskId', exportController.getProgress);
+router.get('/progress/:taskId', exportController.getProgress.bind(exportController));
 
 // GET /api/export/download - 打包下载导出目录
 router.get('/download', exportController.downloadExport);
