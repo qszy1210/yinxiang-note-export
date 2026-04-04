@@ -26,7 +26,7 @@ const StateManager = (function() {
       selectedTags: []
     },
     ui: {
-      activeTab: 'config',
+      activeTab: 'export',
       theme: 'light'
     }
   };

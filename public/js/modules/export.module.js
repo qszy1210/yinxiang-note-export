@@ -529,15 +529,20 @@ const ExportModule = (function() {
 
     showProgressCard(true);
     updateProgress(0, '准备导出...');
+    UIModule?.log('INFO', `开始导出: 选择 ${selectedNotebooks.length} 个笔记本, ${selectedNotes.length} 篇笔记`);
 
     try {
       if (selectedNotebooks.length > 0) {
         // 使用批量导出接口
+        UIModule?.log('INFO', `调用批量导出 API...`);
         const result = await API.export.batch(selectedNotebooks, imageFormat);
 
         if (result.data?.taskId) {
+          UIModule?.log('INFO', `任务已创建, TaskID: ${result.data.taskId}, 开始轮询进度`);
           // 轮询进度
           await pollExportProgress(result.data.taskId);
+        } else {
+          UIModule?.log('ERROR', `API 返回异常: ${JSON.stringify(result)}`);
         }
       } else if (selectedNotes.length > 0) {
         // 逐个导出笔记
@@ -614,6 +619,8 @@ const ExportModule = (function() {
           `导出进度: ${data.data.progress || 0}% (${data.data.success || 0}/${data.data.total || 0})`
         );
 
+        UIModule?.log('INFO', `进度更新: ${data.data.progress || 0}% (${data.data.success || 0}/${data.data.total || 0})`);
+
         if (data.data.status === 'completed') {
           clearInterval(exportPollInterval);
           exportPollInterval = null;
@@ -649,6 +656,12 @@ const ExportModule = (function() {
    */
   function showExportResult(successCount, errorCount) {
     updateProgress(100, '导出完成');
+
+    if (errorCount > 0) {
+      UIModule?.log('WARN', `导出完成: 成功 ${successCount}，失败 ${errorCount}`);
+    } else {
+      UIModule?.log('INFO', `导出完成: 成功 ${successCount}`);
+    }
 
     if (elements.exportResult) {
       elements.exportResult.style.display = 'block';

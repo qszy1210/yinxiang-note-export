@@ -21,6 +21,11 @@ const UIModule = (function() {
   function cacheElements() {
     elements.tabBtns = document.querySelectorAll('.tab-btn');
     elements.tabPanels = document.querySelectorAll('.tab-panel');
+    // 日志面板元素
+    elements.logPanel = document.getElementById('logPanel');
+    elements.logHeader = document.getElementById('logHeader');
+    elements.logToggle = document.getElementById('logToggle');
+    elements.logContent = document.getElementById('logContent');
   }
 
   /**
@@ -30,6 +35,10 @@ const UIModule = (function() {
     elements.tabBtns.forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
+    // 日志面板折叠/展开
+    if (elements.logHeader) {
+      elements.logHeader.addEventListener('click', toggleLogPanel);
+    }
   }
 
   /**
@@ -57,7 +66,7 @@ const UIModule = (function() {
    * 更新当前激活的 Tab
    */
   function updateActiveTab() {
-    const activeTab = StateManager?.getState?.('ui.activeTab') || 'config';
+    const activeTab = StateManager?.getState?.('ui.activeTab') || 'export';
     switchTab(activeTab);
   }
 
@@ -177,6 +186,51 @@ const UIModule = (function() {
     }
   }
 
+  /**
+   * 切换日志面板折叠状态
+   */
+  function toggleLogPanel() {
+    if (!elements.logContent || !elements.logToggle) return;
+
+    const isExpanded = elements.logContent.classList.toggle('expanded');
+    elements.logToggle.classList.toggle('collapsed', !isExpanded);
+  }
+
+  /**
+   * 添加日志条目
+   * @param {string} level - 日志级别 INFO|WARN|ERROR|DEBUG
+   * @param {string} message - 日志消息
+   */
+  function log(level, message) {
+    if (!elements.logContent) return;
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="time">[${timeStr}]</span> <span class="level ${level}">${level}</span> <span class="message">${escapeHtml(message)}</span>`;
+
+    elements.logContent.appendChild(entry);
+
+    // 自动滚动到底部
+    elements.logContent.scrollTop = elements.logContent.scrollHeight;
+
+    // 限制日志数量
+    while (elements.logContent.children.length > 200) {
+      elements.logContent.removeChild(elements.logContent.firstChild);
+    }
+  }
+
+  /**
+   * HTML 转义
+   */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   return {
     init,
     switchTab,
@@ -187,6 +241,8 @@ const UIModule = (function() {
     confirm,
     alert,
     updateProgress,
-    setVisible
+    setVisible,
+    toggleLogPanel,
+    log
   };
 })();
