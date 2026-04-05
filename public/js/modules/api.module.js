@@ -103,6 +103,12 @@ const API = (function() {
           method: 'POST',
           body: JSON.stringify({ notebookGuids, imageFormat })
         }),
+      // 批量导出指定笔记（新增）
+      notes: (noteGuids, imageFormat) =>
+        request('/export/notes', {
+          method: 'POST',
+          body: JSON.stringify({ noteGuids, imageFormat })
+        }),
       // 获取任务进度（新增）
       getProgress: (taskId) => request(`/export/progress/${taskId}`),
       download: (path) => {
