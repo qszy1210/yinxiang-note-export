@@ -128,9 +128,12 @@ const ExportModule = (function() {
 
       // 友好的错误提示
       let errorMsg = '加载失败: ' + err.message;
+      let isRateLimit = false;
       if (err.message.includes('RATE_LIMIT_REACHED') || err.message.includes('限流')) {
         errorMsg = '请求过于频繁，请稍后再试（印象笔记 API 限制）';
+        isRateLimit = true;
       }
+      UIModule?.log('ERROR', `加载笔记本失败${isRateLimit ? '（限流）' : ''}: ${err.message}`);
       showStatus(errorMsg, 'error');
 
       // 恢复按钮
@@ -169,13 +172,31 @@ const ExportModule = (function() {
   }
 
   /**
+   * 获取笔记总数缓存
+   */
+  function getNoteTotalCache() {
+    return StateManager?.getState?.('export.noteTotalCache') || {};
+  }
+
+  /**
+   * 保存笔记总数缓存
+   */
+  function saveNoteTotalCache(cache) {
+    if (StateManager) {
+      StateManager.setState('export.noteTotalCache', cache);
+    }
+  }
+
+  /**
    * 渲染笔记本列表
    */
   function renderNotebooks() {
     const notebooks = StateManager?.getState?.('export.notebooks') || [];
     const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
     const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+    const currentNotes = StateManager?.getState?.('export.notes') || [];
     const noteCache = getNoteSelectionCache();
+    const noteTotalCache = getNoteTotalCache();
     const query = searchQuery.notebooks.toLowerCase();
 
     // 过滤笔记本
@@ -206,14 +227,26 @@ const ExportModule = (function() {
 
     // 计算每个笔记本的勾选状态
     // notebookSelectionStatus: { [guid]: 'checked' | 'partial' | 'none' }
+    // 判断依据：缓存中的选中数 vs 笔记总数
     const notebookStatus = {};
     filtered.forEach(nb => {
       const cached = noteCache[nb.guid] || new Set();
-      // 检查该笔记本是否有缓存的笔记选择
-      // 注意：我们还不知道笔记总数，所以只能根据缓存判断
-      if (cached.size > 0) {
-        notebookStatus[nb.guid] = 'partial'; // 有缓存但不知道是否全选，先显示 partial
+      const totalCount = noteTotalCache[nb.guid] || 0;
+
+      // 优先根据缓存和总数判断（不管是否是当前笔记本）
+      if (totalCount > 0 && cached.size > 0) {
+        if (cached.size === totalCount) {
+          // 全选
+          notebookStatus[nb.guid] = 'checked';
+        } else if (cached.size < totalCount) {
+          // 部分选中：只有当笔记数 > 1 时才显示 partial
+          notebookStatus[nb.guid] = totalCount > 1 ? 'partial' : 'checked';
+        }
+      } else if (totalCount > 0 && cached.size === 0) {
+        // 有笔记但未选中
+        notebookStatus[nb.guid] = 'none';
       } else {
+        // 没有加载过笔记或总数未知
         notebookStatus[nb.guid] = 'none';
       }
     });
@@ -224,8 +257,9 @@ const ExportModule = (function() {
     noStack.forEach(nb => {
       const status = notebookStatus[nb.guid] || 'none';
       const isCurrent = nb.guid === currentNotebook;
-      const count = noteCache[nb.guid]?.size || 0;
-      html += createNotebookItem(nb, selectedNotebooks, false, isCurrent, status, count);
+      const selectedCount = noteCache[nb.guid]?.size || 0;
+      const totalCount = noteTotalCache[nb.guid] || 0;
+      html += createNotebookItem(nb, selectedNotebooks, false, isCurrent, status, selectedCount, totalCount);
     });
 
     // 有 stack 的笔记本
@@ -234,8 +268,9 @@ const ExportModule = (function() {
       stackNotebooks.forEach(nb => {
         const status = notebookStatus[nb.guid] || 'none';
         const isCurrent = nb.guid === currentNotebook;
-        const count = noteCache[nb.guid]?.size || 0;
-        html += createNotebookItem(nb, selectedNotebooks, true, isCurrent, status, count);
+        const selectedCount = noteCache[nb.guid]?.size || 0;
+        const totalCount = noteTotalCache[nb.guid] || 0;
+        html += createNotebookItem(nb, selectedNotebooks, true, isCurrent, status, selectedCount, totalCount);
       });
     });
 
@@ -272,8 +307,11 @@ const ExportModule = (function() {
   /**
    * 创建笔记本项 HTML
    */
-  function createNotebookItem(notebook, selected, indent = false, isCurrent = false, selectionStatus = 'none', selectedCount = 0) {
-    const checked = selected.includes(notebook.guid) ? 'checked' : '';
+  function createNotebookItem(notebook, selected, indent = false, isCurrent = false, selectionStatus = 'none', selectedCount = 0, totalCount = 0) {
+    // checkbox 勾选状态：要么是 selectedNotebooks 中的，要么是笔记全选
+    const isCheckedInSelected = selected.includes(notebook.guid);
+    const isAllNotesSelected = totalCount > 0 && selectedCount === totalCount;
+    const checked = isCheckedInSelected || isAllNotesSelected ? 'checked' : '';
     const style = indent ? 'padding-left: 28px;' : '';
     // 完全选中时的样式（左侧勾选框勾中）
     const selectedClass = checked ? 'selected' : '';
@@ -290,8 +328,11 @@ const ExportModule = (function() {
       checkboxHtml = `<input type="checkbox" ${checked}>`;
     }
 
-    // 已选中数量显示
-    const countHtml = selectedCount > 0 ? ` <span class="note-count">(${selectedCount})</span>` : '';
+    // 已选中数量显示 (n/m 格式，只要有总数就显示)
+    let countHtml = '';
+    if (totalCount > 0) {
+      countHtml = ` <span class="note-count">(${selectedCount}/${totalCount})</span>`;
+    }
 
     return `
       <div class="notebook-item ${selectedClass} ${currentClass} ${partialClass}" data-guid="${notebook.guid}" style="${style}">
@@ -325,12 +366,115 @@ const ExportModule = (function() {
       item.classList.toggle('selected', checked);
     }
 
-    // 勾选左侧笔记本时，自动加载该笔记本的笔记到右侧
+    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+
+    // 勾选/取消勾选左侧笔记本时
     if (checked) {
-      loadNotesForNotebook(guid);
+      // 如果是当前笔记本，加载笔记并全选
+      if (currentNotebook === guid) {
+        loadNotesForNotebookWithSelection(guid, true);
+      } else {
+        // 如果不是当前笔记本，先标记为全选（但不知道总数，先不更新数字）
+        // 然后异步加载笔记来获取总数
+        _pendingNotebookSelection = { guid, selected: true };
+        // 不切换右侧显示，只加载笔记获取总数
+        loadNotesForNotebookTotalOnly(guid);
+      }
+    } else {
+      // 取消勾选笔记本时，清空该笔记本的笔记缓存和总数
+      const noteCache = getNoteSelectionCache();
+      delete noteCache[guid];
+      saveNoteSelectionCache(noteCache);
+
+      const noteTotalCache = getNoteTotalCache();
+      delete noteTotalCache[guid];
+      saveNoteTotalCache(noteTotalCache);
+
+      // 如果当前查看的就是这个笔记本，清空笔记选中状态但不删除笔记列表
+      if (currentNotebook === guid) {
+        // 清空选中状态后重新渲染笔记列表（显示为未勾选）
+        renderNotes();
+        updateCurrentNotebookDisplay();
+      }
+      // 更新左侧笔记本显示
+      renderNotebooks();
     }
 
     updateUI();
+  }
+
+  /**
+   * 加载笔记本笔记并同步勾选状态
+   * @param {string} guid - 笔记本 guid
+   * @param {boolean} selectAll - 是否全选该笔记本的笔记
+   */
+  async function loadNotesForNotebookWithSelection(guid, selectAll) {
+    elements.noteList.innerHTML = '<p class="placeholder">加载中...</p>';
+
+    // 设置当前查看的笔记本
+    if (StateManager) {
+      StateManager.setState('export.currentNotebook', guid);
+    }
+
+    try {
+      const data = await API.notebooks.getNotes(guid);
+
+      if (data.success) {
+        let notes = data.data.notes || [];
+        // 给每个笔记添加 notebookGuid
+        notes.forEach(note => note.notebookGuid = guid);
+
+        if (StateManager) {
+          StateManager.setState('export.notes', notes);
+        }
+
+        // 同步勾选状态
+        const noteCache = getNoteSelectionCache();
+        if (selectAll) {
+          noteCache[guid] = new Set(notes.map(n => n.guid));
+        } else {
+          noteCache[guid] = new Set();
+        }
+        saveNoteSelectionCache(noteCache);
+
+        // 保存笔记总数
+        const noteTotalCache = getNoteTotalCache();
+        noteTotalCache[guid] = notes.length;
+        saveNoteTotalCache(noteTotalCache);
+
+        renderNotes();
+        // 更新当前笔记本名称显示
+        updateCurrentNotebookDisplay();
+        // renderNotebooks() 会正确计算所有笔记本的勾选状态
+        renderNotebooks();
+
+        // 检查是否有待执行的 partial 操作
+        if (_pendingPartialAction && _pendingPartialAction.guid === guid) {
+          const action = _pendingPartialAction;
+          _pendingPartialAction = null;
+          if (action.type === 'toggle') {
+            // 重新计算选中状态
+            const cachedNotes = noteCache[guid] || new Set();
+            const updatedNotes = StateManager?.getState?.('export.notes') || [];
+            const notebookNotes = updatedNotes.filter(n => n.notebookGuid === guid);
+            const selectedCount = notebookNotes.filter(n => cachedNotes.has(n.guid)).length;
+
+            if (selectedCount === notebookNotes.length) {
+              noteCache[guid] = new Set();
+            } else {
+              noteCache[guid] = new Set(notebookNotes.map(n => n.guid));
+            }
+            saveNoteSelectionCache(noteCache);
+            updateNotebookCheckboxState(guid);
+            renderNotes();
+            updateCurrentNotebookDisplay();
+          }
+        }
+      }
+    } catch (err) {
+      console.error('加载笔记失败:', err);
+      elements.noteList.innerHTML = '<p class="placeholder">加载失败</p>';
+    }
   }
 
   /**
@@ -343,15 +487,15 @@ const ExportModule = (function() {
   function handlePartialClick(guid) {
     const noteCache = getNoteSelectionCache();
     const cachedNotes = noteCache[guid] || new Set();
-    
+
     // 获取该笔记本的笔记
     const allNotes = StateManager?.getState?.('export.notes') || [];
     const notebookNotes = allNotes.filter(n => n.notebookGuid === guid);
-    
+
     if (notebookNotes.length > 0) {
       // 笔记已加载，直接处理
       const selectedCount = notebookNotes.filter(n => cachedNotes.has(n.guid)).length;
-      
+
       if (selectedCount === notebookNotes.length) {
         // 当前是全选状态 → 取消全选
         noteCache[guid] = new Set();
@@ -360,10 +504,10 @@ const ExportModule = (function() {
         noteCache[guid] = new Set(notebookNotes.map(n => n.guid));
       }
       saveNoteSelectionCache(noteCache);
-      
+
       // 更新显示
       updateNotebookCheckboxState(guid);
-      
+
       // 如果当前查看的就是这个笔记本，更新右侧显示
       const currentNotebook = StateManager?.getState?.('export.currentNotebook');
       if (currentNotebook === guid) {
@@ -374,6 +518,7 @@ const ExportModule = (function() {
       // 笔记未加载，先加载再处理
       // 临时存储要执行的操作，加载完成后执行
       _pendingPartialAction = { type: 'toggle', guid };
+      // 加载笔记并保持当前的勾选状态切换逻辑
       loadNotesForNotebook(guid);
     }
   }
@@ -383,18 +528,85 @@ const ExportModule = (function() {
    */
   let _pendingPartialAction = null;
 
+  /**
+   * 临时存储待执行的笔记本勾选操作（用于非当前笔记本勾选时加载总数）
+   */
+  let _pendingNotebookSelection = null;
+
+  /**
+   * 加载笔记本笔记总数（不切换右侧显示）
+   * 用于勾选非当前笔记本时，获取总数来显示 n/m
+   */
+  async function loadNotesForNotebookTotalOnly(notebookGuid) {
+    try {
+      const data = await API.notebooks.getNotes(notebookGuid);
+
+      if (data.success) {
+        let notes = data.data.notes || [];
+        notes.forEach(note => note.notebookGuid = notebookGuid);
+
+        // 保存笔记总数
+        const noteTotalCache = getNoteTotalCache();
+        noteTotalCache[notebookGuid] = notes.length;
+        saveNoteTotalCache(noteTotalCache);
+
+        // 处理待执行的勾选操作
+        if (_pendingNotebookSelection && _pendingNotebookSelection.guid === notebookGuid) {
+          const pending = _pendingNotebookSelection;
+          _pendingNotebookSelection = null;
+
+          if (pending.selected) {
+            // 全选该笔记本的笔记
+            const noteCache = getNoteSelectionCache();
+            noteCache[notebookGuid] = new Set(notes.map(n => n.guid));
+            saveNoteSelectionCache(noteCache);
+          }
+        }
+
+        // 更新左侧笔记本显示
+        renderNotebooks();
+      }
+    } catch (err) {
+      console.error('加载笔记总数失败:', err);
+    }
+  }
+
   function handleSelectAllNotebooks() {
     const notebooks = StateManager?.getState?.('export.notebooks') || [];
-    const allSelected = (StateManager?.getState?.('export.selectedNotebooks') || []).length === notebooks.length;
+    const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
 
-    const newSelection = allSelected ? [] : notebooks.map(nb => nb.guid);
+    // 判断是否是全部选中：selectedNotebooks 数量等于笔记本数量
+    const allSelected = selectedNotebooks.length === notebooks.length;
 
-    if (StateManager) {
-      StateManager.setState('export.selectedNotebooks', newSelection);
-      // 选中笔记本时清空单独的笔记选择
-      if (newSelection.length > 0) {
-        StateManager.setState('export.selectedNotes', []);
+    if (allSelected) {
+      // 取消全选：清空所有笔记本和笔记的勾选状态
+      if (StateManager) {
+        StateManager.setState('export.selectedNotebooks', []);
       }
+      // 清空所有笔记本的笔记缓存
+      const noteCache = getNoteSelectionCache();
+      Object.keys(noteCache).forEach(guid => {
+        delete noteCache[guid];
+      });
+      saveNoteSelectionCache(noteCache);
+      // 清空笔记总数缓存
+      const noteTotalCache = getNoteTotalCache();
+      Object.keys(noteTotalCache).forEach(guid => {
+        delete noteTotalCache[guid];
+      });
+      saveNoteTotalCache(noteTotalCache);
+      // 清空当前笔记列表
+      if (StateManager) {
+        StateManager.setState('export.notes', []);
+      }
+      renderNotes();
+    } else {
+      // 全选所有笔记本
+      if (StateManager) {
+        StateManager.setState('export.selectedNotebooks', notebooks.map(nb => nb.guid));
+      }
+      // 注意：这里只选中笔记本，不自动选中笔记（因为需要加载）
+      // 如果当前有加载的笔记，这些笔记所属的笔记本已被选中，所以会显示为勾选状态
     }
 
     renderNotebooks();
@@ -446,6 +658,7 @@ const ExportModule = (function() {
     try {
       // 收集所有笔记
       const allNotes = [];
+      const noteTotalCache = getNoteTotalCache();
 
       for (const notebookGuid of selectedNotebooks) {
         const data = await API.notebooks.getNotes(notebookGuid);
@@ -455,8 +668,11 @@ const ExportModule = (function() {
           // 给每个笔记添加 notebookGuid
           notes.forEach(note => note.notebookGuid = notebookGuid);
           allNotes.push(...notes);
+          // 保存每个笔记本的笔记总数
+          noteTotalCache[notebookGuid] = notes.length;
         }
       }
+      saveNoteTotalCache(noteTotalCache);
 
       if (StateManager) {
         StateManager.setState('export.notes', allNotes);
@@ -464,9 +680,12 @@ const ExportModule = (function() {
 
       renderNotes();
       updateCurrentNotebookDisplay();
+      renderNotebooks();
     } catch (err) {
       console.error('加载笔记失败:', err);
       elements.noteList.innerHTML = '<p class="placeholder">加载失败</p>';
+      let isRateLimit = err.message.includes('RATE_LIMIT_REACHED') || err.message.includes('限流');
+      UIModule?.log('ERROR', `加载笔记失败${isRateLimit ? '（限流）' : ''}: ${err.message}`);
     }
   }
 
@@ -493,11 +712,22 @@ const ExportModule = (function() {
           StateManager.setState('export.notes', notes);
         }
 
+        // 确保缓存存在（如果之前没有初始化过）
+        const noteCache = getNoteSelectionCache();
+        if (!noteCache[notebookGuid]) {
+          noteCache[notebookGuid] = new Set();
+          saveNoteSelectionCache(noteCache);
+        }
+
+        // 保存笔记总数
+        const noteTotalCache = getNoteTotalCache();
+        noteTotalCache[notebookGuid] = notes.length;
+        saveNoteTotalCache(noteTotalCache);
+
         renderNotes();
         // 更新当前笔记本名称显示
         updateCurrentNotebookDisplay();
-        // 加载笔记后更新左侧笔记本的勾选状态
-        updateNotebookCheckboxState(notebookGuid);
+        // renderNotebooks() 会正确计算所有笔记本的勾选状态，不需要单独调用 updateNotebookCheckboxState
         renderNotebooks(); // 重新渲染笔记本以更新当前笔记本的样式
 
         // 检查是否有待执行的 partial 操作
@@ -527,6 +757,8 @@ const ExportModule = (function() {
     } catch (err) {
       console.error('加载笔记失败:', err);
       elements.noteList.innerHTML = '<p class="placeholder">加载失败</p>';
+      let isRateLimit = err.message.includes('RATE_LIMIT_REACHED') || err.message.includes('限流');
+      UIModule?.log('ERROR', `加载笔记失败${isRateLimit ? '（限流）' : ''}: ${err.message}`);
     }
   }
 
@@ -539,13 +771,6 @@ const ExportModule = (function() {
     const noteCache = getNoteSelectionCache();
     const cachedSelection = currentNotebook ? (noteCache[currentNotebook] || new Set()) : new Set();
     const query = searchQuery.notes.toLowerCase();
-
-    // 当笔记本选择变化时自动加载笔记
-    const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
-    if (selectedNotebooks.length > 0 && notes.length === 0) {
-      loadNotesForNotebooks();
-      return;
-    }
 
     const filtered = notes.filter(note =>
       note.title.toLowerCase().includes(query)
@@ -575,9 +800,9 @@ const ExportModule = (function() {
 
     elements.noteList.innerHTML = html;
 
-    // 更新笔记计数（只显示总数，选中数量在左侧笔记本旁显示）
+    // 右侧笔记计数不在这里显示，数字显示在左侧笔记本后面
     if (elements.noteCount) {
-      elements.noteCount.textContent = notes.length > 0 ? `(${notes.length} 篇)` : '';
+      elements.noteCount.textContent = '';
     }
 
     // 全选checkbox只在有搜索过滤时显示
@@ -644,6 +869,8 @@ const ExportModule = (function() {
     updateNotebookCheckboxState(currentNotebook);
     // 更新当前笔记本名称显示
     updateCurrentNotebookDisplay();
+    // 更新左侧笔记本的数字显示 (n/m)
+    renderNotebooks();
     updateUI();
   }
 
@@ -689,6 +916,27 @@ const ExportModule = (function() {
         }
       }
     }
+  }
+
+  /**
+   * 更新所有笔记本的勾选状态
+   * 当加载笔记后，遍历所有有缓存的笔记本并更新其勾选状态
+   */
+  function updateAllNotebooksCheckboxState() {
+    const noteCache = getNoteSelectionCache();
+    const notebooks = StateManager?.getState?.('export.notebooks') || [];
+    const currentNotes = StateManager?.getState?.('export.notes') || [];
+
+    notebooks.forEach(nb => {
+      const cachedNotes = noteCache[nb.guid] || new Set();
+      // 只更新有缓存且当前笔记列表中有该笔记本笔记的情况
+      if (cachedNotes.size > 0) {
+        const notebookNotes = currentNotes.filter(n => n.notebookGuid === nb.guid);
+        if (notebookNotes.length > 0) {
+          updateNotebookCheckboxState(nb.guid);
+        }
+      }
+    });
   }
 
   /**
@@ -808,33 +1056,27 @@ const ExportModule = (function() {
   function updateUI() {
     const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
     const noteCache = getNoteSelectionCache();
-    
-    // 计算所有笔记本缓存的选中笔记总数
+
+    // 计算选中笔记本下的选中笔记总数
     let totalSelectedNotes = 0;
-    Object.values(noteCache).forEach(set => {
-      totalSelectedNotes += set.size;
+    selectedNotebooks.forEach(nbGuid => {
+      const selectedNotes = noteCache[nbGuid] || new Set();
+      totalSelectedNotes += selectedNotes.size;
     });
 
-    const hasSelection = selectedNotebooks.length > 0 || totalSelectedNotes > 0;
+    const hasSelection = totalSelectedNotes > 0;
 
     // 更新导出按钮
     if (elements.exportBtn) {
       elements.exportBtn.disabled = !hasSelection;
 
       // 更新按钮文本
-      if (selectedNotebooks.length > 0 && totalSelectedNotes > 0) {
-        elements.exportBtn.textContent = `导出选中 (${selectedNotebooks.length} 笔记本 + ${totalSelectedNotes} 笔记)`;
-      } else if (selectedNotebooks.length > 0) {
-        elements.exportBtn.textContent = `导出选中笔记本 (${selectedNotebooks.length})`;
-      } else if (totalSelectedNotes > 0) {
-        elements.exportBtn.textContent = `导出选中笔记 (${totalSelectedNotes})`;
+      if (totalSelectedNotes > 0) {
+        elements.exportBtn.textContent = `导出选中 (${totalSelectedNotes} 笔记)`;
       } else {
         elements.exportBtn.textContent = '导出选中';
       }
     }
-
-    // 注意：不再在这里自动加载笔记，避免覆盖右侧当前笔记本的显示
-    // 笔记加载由 loadNotesForNotebook() 单独处理
   }
 
   /**
@@ -843,56 +1085,36 @@ const ExportModule = (function() {
   async function handleExport() {
     const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
     const noteCache = getNoteSelectionCache();
-    
-    // 计算所有选中的笔记
-    let selectedNoteGuids = [];
-    Object.values(noteCache).forEach(set => {
-      selectedNoteGuids.push(...Array.from(set));
+
+    // 构建导出列表：只导出选中笔记本下的选中笔记
+    const noteGuids = [];
+    selectedNotebooks.forEach(nbGuid => {
+      const selectedNotes = noteCache[nbGuid] || new Set();
+      selectedNotes.forEach(guid => noteGuids.push(guid));
     });
 
     const imageFormat = document.querySelector('input[name="imageFormat"]:checked')?.value || 'obsidian';
 
-    if (selectedNotebooks.length === 0 && selectedNoteGuids.length === 0) {
-      showStatus('请先选择要导出的内容', 'error');
+    if (noteGuids.length === 0) {
+      showStatus('请先选择要导出的笔记', 'error');
       return;
     }
 
     showProgressCard(true);
     updateProgress(0, '准备导出...');
-    UIModule?.log('INFO', `开始导出: 选择 ${selectedNotebooks.length} 个笔记本, ${selectedNoteGuids.length} 篇笔记`);
+    UIModule?.log('INFO', `开始导出: ${noteGuids.length} 篇笔记`);
 
     try {
-      if (selectedNotebooks.length > 0) {
-        // 使用批量导出接口
-        UIModule?.log('INFO', `调用批量导出 API...`);
-        const result = await API.export.batch(selectedNotebooks, imageFormat);
+      // 使用新的按笔记列表批量导出接口
+      UIModule?.log('INFO', `调用批量导出 API...`);
+      const result = await API.export.notes(noteGuids, imageFormat);
 
-        if (result.data?.taskId) {
-          UIModule?.log('INFO', `任务已创建, TaskID: ${result.data.taskId}, 开始轮询进度`);
-          // 轮询进度
-          await pollExportProgress(result.data.taskId);
-        } else {
-          UIModule?.log('ERROR', `API 返回异常: ${JSON.stringify(result)}`);
-        }
-      } else if (selectedNoteGuids.length > 0) {
-        // 逐个导出笔记
-        let completed = 0;
-        const errors = [];
-
-        for (const guid of selectedNoteGuids) {
-          try {
-            await API.export.note(guid, imageFormat);
-            completed++;
-            updateProgress(
-              Math.floor((completed / selectedNoteGuids.length) * 100),
-              `正在导出 (${completed}/${selectedNoteGuids.length})`
-            );
-          } catch (err) {
-            errors.push({ guid, error: err.message });
-          }
-        }
-
-        showExportResult(completed, errors.length);
+      if (result.data?.taskId) {
+        UIModule?.log('INFO', `任务已创建, TaskID: ${result.data.taskId}, 开始轮询进度`);
+        // 轮询进度
+        await pollExportProgress(result.data.taskId);
+      } else {
+        UIModule?.log('ERROR', `API 返回异常: ${JSON.stringify(result)}`);
       }
     } catch (err) {
       showStatus('导出失败: ' + err.message, 'error');
