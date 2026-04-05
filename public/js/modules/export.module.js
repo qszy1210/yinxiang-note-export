@@ -326,6 +326,9 @@ const ExportModule = (function() {
     let countHtml = '';
     if (totalCount > 0) {
       countHtml = ` <span class="note-count">(${selectedCount}/${totalCount})</span>`;
+    } else if (selectedCount > 0 || selected.includes(notebook.guid)) {
+      // 笔记本被选中但笔记未加载
+      countHtml = ` <span class="note-count">(-/-)</span>`;
     }
 
     return `
