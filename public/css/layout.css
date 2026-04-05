@@ -6,9 +6,9 @@
 /* 导出 Tab 左右布局 */
 .export-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 340px 1fr;  /* 左栏固定 340px，右栏自适应 */
   gap: 20px;
-  min-height: 500px;
+  min-width: 700px;
 }
 
 .export-sidebar {
@@ -86,6 +86,13 @@
 /* 笔记列表高度优化 */
 .note-list {
   height: 350px;
+}
+
+.note-list .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
 }
 
 .notebook-list {
