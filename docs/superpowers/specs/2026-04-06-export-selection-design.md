@@ -18,18 +18,30 @@
 
 ### 1. 导出逻辑
 
+**新增后端 API：**
+- `POST /api/export/notes` 接受 `noteGuids[]`
+- 后端遍历导出所有指定笔记，生成一个 ZIP
+- 有统一进度显示，支持队列
+
 **修改 `handleExport()`：**
 - 选中笔记本时，**按 noteSelectionCache 精确导出**该笔记本下被选中的笔记
+- 调用新的 `API.export.notes(noteGuids)` 接口
 - 只有选中笔记本的笔记才导出，其他笔记本的笔记不受影响
 
+**前端逻辑：**
 ```javascript
-// 导出逻辑
+// 构建导出列表：从 noteCache 中收集所有选中的笔记 GUID
 const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
 const noteCache = getNoteSelectionCache();
 
-// 构建导出列表：
-// 1. 选中笔记本的所有笔记（如果 noteCache 中有记录，按记录精确导出）
-// 2. 未选中笔记本的笔记不受影响
+const noteGuids = [];
+selectedNotebooks.forEach(nbGuid => {
+  const selectedNotes = noteCache[nbGuid] || [];
+  noteGuids.push(...Array.from(selectedNotes));
+});
+
+// 调用新的批量导出接口
+const result = await API.export.notes(noteGuids, imageFormat);
 ```
 
 **具体行为：**
@@ -104,6 +116,7 @@ const noteCache = getNoteSelectionCache();
 
 **n/m 数字显示：**
 - **始终显示**（因为笔记勾选影响导出了，部分选中的状态需要可见）
+- 笔记本被勾选但笔记未加载时：显示 `(-/-)` 表示还未加载
 
 **checkbox 状态：**
 - `checked`：笔记本全选中（笔记全部勾选）
@@ -162,6 +175,12 @@ const noteCache = getNoteSelectionCache();
 
 ## 涉及文件
 
+**后端：**
+- `server/routes/export.js` - 新增 `POST /api/export/notes` 路由
+- `server/controllers/export.controller.js` - 新增 `exportNotes` 方法
+
+**前端：**
+- `public/js/modules/api.module.js` - 新增 `export.notes()` 方法
 - `public/js/modules/export.module.js` - 导出逻辑修改
 - `public/index.html` - HTML 结构变更（导出设置移到左栏）
 - `public/css/layout.css` - 布局样式调整
@@ -169,9 +188,11 @@ const noteCache = getNoteSelectionCache();
 
 ## 实现顺序
 
-1. 修改 HTML 结构（导出设置移到左栏）
-2. 修改 CSS 布局（固定左栏宽度、右栏自适应、笔记标题截断）
-3. 修改导出逻辑（handleExport 按 noteSelectionCache 精确导出）
-4. 添加右侧顶部提示文字
-5. 移除搜索结果的全选 checkbox
-6. 测试各种场景
+1. **后端**：新增 `POST /api/export/notes` 接口（接受 `noteGuids[]`，批量导出指定笔记）
+2. **前端**：新增 `API.export.notes(noteGuids, imageFormat)` 方法
+3. **前端**：修改 HTML 结构（导出设置移到左栏）
+4. **前端**：修改 CSS 布局（固定左栏宽度、右栏自适应、笔记标题截断、(-/-) 显示）
+5. **前端**：修改 `handleExport()` 按 noteSelectionCache 精确导出
+6. **前端**：添加右侧顶部提示文字
+7. **前端**：移除搜索结果的全选 checkbox
+8. 测试各种场景
