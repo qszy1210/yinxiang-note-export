@@ -44,6 +44,34 @@
   background-color: #e8f5e9;
 }
 
+/* 当前查看的笔记本（未选中时） */
+.notebook-item.current {
+  background-color: #fff3e0;
+}
+
+/* 部分选中的笔记本 */
+.notebook-item.partial {
+  background-color: #fff8e1;
+}
+
+/* 部分选中状态的 checkbox 样式 */
+.checkbox-partial {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 10px;
+  text-align: center;
+  line-height: 14px;
+  color: #ff9800;
+  font-weight: bold;
+}
+
+/* 笔记本已选中笔记数量 */
+.notebook-item .note-count {
+  color: #666;
+  font-size: 0.9em;
+}
+
 /* 笔记本 stack 标题 */
 .stack-header {
   background: #f0f0f0;
@@ -107,9 +135,12 @@
   color: #721c24;
 }
 
-/* 标签列表 */
-.tag-list {
-  height: 300px;
+/* 当前笔记本名称显示 */
+.notebook-name {
+  margin: 0 0 10px 0;
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: normal;
 }
 
 /* 响应式 */

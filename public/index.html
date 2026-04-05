@@ -76,13 +76,14 @@
           <div class="export-main">
             <div class="card">
               <h2>选择笔记 <span id="noteCount"></span></h2>
+              <p id="currentNotebookName" class="notebook-name"></p>
               <div class="search-box">
                 <input type="text" id="noteSearch" placeholder="搜索笔记..." class="search-input">
                 <button type="button" id="clearNoteSearch" class="search-clear" title="清除">&times;</button>
               </div>
-              <div class="list-header">
+              <div class="list-header" id="selectAllHeader" style="display: none;">
                 <label>
-                  <input type="checkbox" id="selectAllNotes"> 全选当前筛选结果
+                  <input type="checkbox" id="selectAllNotes"> 全选
                 </label>
               </div>
               <div id="noteList" class="list-container note-list">

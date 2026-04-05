@@ -27,7 +27,9 @@ const ExportModule = (function() {
     elements.clearNoteSearch = document.getElementById('clearNoteSearch');
     elements.noteList = document.getElementById('noteList');
     elements.noteCount = document.getElementById('noteCount');
+    elements.currentNotebookName = document.getElementById('currentNotebookName');
     elements.selectAllNotes = document.getElementById('selectAllNotes');
+    elements.selectAllHeader = document.getElementById('selectAllHeader');
     elements.selectNotebooks = document.getElementById('selectNotebooks');
     elements.exportBtn = document.getElementById('exportSelectedBtn');
     elements.exportNotebookBtn = document.getElementById('exportNotebookBtn');
@@ -140,11 +142,40 @@ const ExportModule = (function() {
   }
 
   /**
+   * 获取笔记选择缓存（每个笔记本独立的勾选状态）
+   */
+  function getNoteSelectionCache() {
+    const cache = StateManager?.getState?.('export.noteSelectionCache') || {};
+    // 确保每个条目都是 Set
+    const result = {};
+    Object.keys(cache).forEach(nbGuid => {
+      result[nbGuid] = new Set(cache[nbGuid] || []);
+    });
+    return result;
+  }
+
+  /**
+   * 保存笔记选择缓存
+   */
+  function saveNoteSelectionCache(cache) {
+    // 将 Map/Object 转换为可序列化格式
+    const serializable = {};
+    Object.keys(cache).forEach(nbGuid => {
+      serializable[nbGuid] = Array.from(cache[nbGuid] || []);
+    });
+    if (StateManager) {
+      StateManager.setState('export.noteSelectionCache', serializable);
+    }
+  }
+
+  /**
    * 渲染笔记本列表
    */
   function renderNotebooks() {
     const notebooks = StateManager?.getState?.('export.notebooks') || [];
-    const selected = StateManager?.getState?.('export.selectedNotebooks') || [];
+    const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
+    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+    const noteCache = getNoteSelectionCache();
     const query = searchQuery.notebooks.toLowerCase();
 
     // 过滤笔记本
@@ -173,18 +204,38 @@ const ExportModule = (function() {
       }
     });
 
+    // 计算每个笔记本的勾选状态
+    // notebookSelectionStatus: { [guid]: 'checked' | 'partial' | 'none' }
+    const notebookStatus = {};
+    filtered.forEach(nb => {
+      const cached = noteCache[nb.guid] || new Set();
+      // 检查该笔记本是否有缓存的笔记选择
+      // 注意：我们还不知道笔记总数，所以只能根据缓存判断
+      if (cached.size > 0) {
+        notebookStatus[nb.guid] = 'partial'; // 有缓存但不知道是否全选，先显示 partial
+      } else {
+        notebookStatus[nb.guid] = 'none';
+      }
+    });
+
     let html = '';
 
     // 无 stack 的笔记本
     noStack.forEach(nb => {
-      html += createNotebookItem(nb, selected);
+      const status = notebookStatus[nb.guid] || 'none';
+      const isCurrent = nb.guid === currentNotebook;
+      const count = noteCache[nb.guid]?.size || 0;
+      html += createNotebookItem(nb, selectedNotebooks, false, isCurrent, status, count);
     });
 
     // 有 stack 的笔记本
     stacks.forEach((stackNotebooks, stackName) => {
       html += `<div class="list-item stack-header">${escapeHtml(stackName)}</div>`;
       stackNotebooks.forEach(nb => {
-        html += createNotebookItem(nb, selected, true);
+        const status = notebookStatus[nb.guid] || 'none';
+        const isCurrent = nb.guid === currentNotebook;
+        const count = noteCache[nb.guid]?.size || 0;
+        html += createNotebookItem(nb, selectedNotebooks, true, isCurrent, status, count);
       });
     });
 
@@ -193,11 +244,27 @@ const ExportModule = (function() {
     // 绑定事件
     elements.notebookList.querySelectorAll('.notebook-item[data-guid]').forEach(item => {
       item.addEventListener('click', (e) => {
-        if (e.target.tagName !== 'INPUT') {
-          const checkbox = item.querySelector('input');
-          checkbox.checked = !checkbox.checked;
+        const guid = item.dataset.guid;
+
+        // 点击部分选中的减号图标，切换到完全选中或取消全选
+        if (e.target.classList.contains('checkbox-partial')) {
+          e.stopPropagation();
+          handlePartialClick(guid);
+          return;
         }
-        toggleNotebookSelection(item.dataset.guid, item.querySelector('input').checked);
+
+        // 点击 checkbox
+        if (e.target.tagName === 'INPUT') {
+          e.stopPropagation();
+          toggleNotebookSelection(guid, e.target.checked);
+          return;
+        }
+
+        // 点击笔记本项（不是 checkbox）只显示笔记
+        if (StateManager) {
+          StateManager.setState('export.currentNotebook', guid);
+        }
+        loadNotesForNotebook(guid);
       });
     });
   }
@@ -205,15 +272,31 @@ const ExportModule = (function() {
   /**
    * 创建笔记本项 HTML
    */
-  function createNotebookItem(notebook, selected, indent = false) {
+  function createNotebookItem(notebook, selected, indent = false, isCurrent = false, selectionStatus = 'none', selectedCount = 0) {
     const checked = selected.includes(notebook.guid) ? 'checked' : '';
     const style = indent ? 'padding-left: 28px;' : '';
+    // 完全选中时的样式（左侧勾选框勾中）
     const selectedClass = checked ? 'selected' : '';
+    // 当前查看的笔记本（有背景色但没完全选中）
+    const currentClass = isCurrent && !checked ? 'current' : '';
+    // 笔记勾选状态
+    const partialClass = selectionStatus === 'partial' ? 'partial' : '';
+
+    let checkboxHtml;
+    if (selectionStatus === 'partial') {
+      // 部分选中状态 - 显示减号
+      checkboxHtml = '<span class="checkbox-partial">&#8212;</span>';
+    } else {
+      checkboxHtml = `<input type="checkbox" ${checked}>`;
+    }
+
+    // 已选中数量显示
+    const countHtml = selectedCount > 0 ? ` <span class="note-count">(${selectedCount})</span>` : '';
 
     return `
-      <div class="notebook-item ${selectedClass}" data-guid="${notebook.guid}" style="${style}">
-        <input type="checkbox" ${checked}>
-        <span>${escapeHtml(notebook.name)}</span>
+      <div class="notebook-item ${selectedClass} ${currentClass} ${partialClass}" data-guid="${notebook.guid}" style="${style}">
+        ${checkboxHtml}
+        <span>${escapeHtml(notebook.name)}${countHtml}</span>
       </div>
     `;
   }
@@ -242,12 +325,64 @@ const ExportModule = (function() {
       item.classList.toggle('selected', checked);
     }
 
+    // 勾选左侧笔记本时，自动加载该笔记本的笔记到右侧
+    if (checked) {
+      loadNotesForNotebook(guid);
+    }
+
     updateUI();
   }
 
   /**
    * 全选/取消全选笔记本
    */
+  /**
+   * 处理左侧笔记本减号➖的点击
+   * @param {string} guid - 笔记本 guid
+   */
+  function handlePartialClick(guid) {
+    const noteCache = getNoteSelectionCache();
+    const cachedNotes = noteCache[guid] || new Set();
+    
+    // 获取该笔记本的笔记
+    const allNotes = StateManager?.getState?.('export.notes') || [];
+    const notebookNotes = allNotes.filter(n => n.notebookGuid === guid);
+    
+    if (notebookNotes.length > 0) {
+      // 笔记已加载，直接处理
+      const selectedCount = notebookNotes.filter(n => cachedNotes.has(n.guid)).length;
+      
+      if (selectedCount === notebookNotes.length) {
+        // 当前是全选状态 → 取消全选
+        noteCache[guid] = new Set();
+      } else {
+        // 当前是部分选中 → 全选
+        noteCache[guid] = new Set(notebookNotes.map(n => n.guid));
+      }
+      saveNoteSelectionCache(noteCache);
+      
+      // 更新显示
+      updateNotebookCheckboxState(guid);
+      
+      // 如果当前查看的就是这个笔记本，更新右侧显示
+      const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+      if (currentNotebook === guid) {
+        renderNotes();
+        updateCurrentNotebookDisplay();
+      }
+    } else {
+      // 笔记未加载，先加载再处理
+      // 临时存储要执行的操作，加载完成后执行
+      _pendingPartialAction = { type: 'toggle', guid };
+      loadNotesForNotebook(guid);
+    }
+  }
+
+  /**
+   * 临时存储待执行的partial操作（用于笔记本笔记未加载时）
+   */
+  let _pendingPartialAction = null;
+
   function handleSelectAllNotebooks() {
     const notebooks = StateManager?.getState?.('export.notebooks') || [];
     const allSelected = (StateManager?.getState?.('export.selectedNotebooks') || []).length === notebooks.length;
@@ -256,6 +391,10 @@ const ExportModule = (function() {
 
     if (StateManager) {
       StateManager.setState('export.selectedNotebooks', newSelection);
+      // 选中笔记本时清空单独的笔记选择
+      if (newSelection.length > 0) {
+        StateManager.setState('export.selectedNotes', []);
+      }
     }
 
     renderNotebooks();
@@ -312,7 +451,10 @@ const ExportModule = (function() {
         const data = await API.notebooks.getNotes(notebookGuid);
 
         if (data.success) {
-          allNotes.push(...(data.data.notes || []));
+          const notes = data.data.notes || [];
+          // 给每个笔记添加 notebookGuid
+          notes.forEach(note => note.notebookGuid = notebookGuid);
+          allNotes.push(...notes);
         }
       }
 
@@ -321,6 +463,67 @@ const ExportModule = (function() {
       }
 
       renderNotes();
+      updateCurrentNotebookDisplay();
+    } catch (err) {
+      console.error('加载笔记失败:', err);
+      elements.noteList.innerHTML = '<p class="placeholder">加载失败</p>';
+    }
+  }
+
+  /**
+   * 加载单个笔记本的笔记（点击笔记本时调用）
+   */
+  async function loadNotesForNotebook(notebookGuid) {
+    elements.noteList.innerHTML = '<p class="placeholder">加载中...</p>';
+
+    // 设置当前查看的笔记本
+    if (StateManager) {
+      StateManager.setState('export.currentNotebook', notebookGuid);
+    }
+
+    try {
+      const data = await API.notebooks.getNotes(notebookGuid);
+
+      if (data.success) {
+        let notes = data.data.notes || [];
+        // 给每个笔记添加 notebookGuid
+        notes.forEach(note => note.notebookGuid = notebookGuid);
+
+        if (StateManager) {
+          StateManager.setState('export.notes', notes);
+        }
+
+        renderNotes();
+        // 更新当前笔记本名称显示
+        updateCurrentNotebookDisplay();
+        // 加载笔记后更新左侧笔记本的勾选状态
+        updateNotebookCheckboxState(notebookGuid);
+        renderNotebooks(); // 重新渲染笔记本以更新当前笔记本的样式
+
+        // 检查是否有待执行的 partial 操作
+        if (_pendingPartialAction && _pendingPartialAction.guid === notebookGuid) {
+          const action = _pendingPartialAction;
+          _pendingPartialAction = null;
+          if (action.type === 'toggle') {
+            // 重新计算选中状态
+            const noteCache = getNoteSelectionCache();
+            const cachedNotes = noteCache[notebookGuid] || new Set();
+            const updatedNotes = StateManager?.getState?.('export.notes') || [];
+            const notebookNotes = updatedNotes.filter(n => n.notebookGuid === notebookGuid);
+            const selectedCount = notebookNotes.filter(n => cachedNotes.has(n.guid)).length;
+
+            if (selectedCount === notebookNotes.length) {
+              noteCache[notebookGuid] = new Set();
+            } else {
+              noteCache[notebookGuid] = new Set(notebookNotes.map(n => n.guid));
+            }
+            saveNoteSelectionCache(noteCache);
+            updateNotebookCheckboxState(notebookGuid);
+            renderNotes();
+            updateCurrentNotebookDisplay();
+          }
+        }
+      }
     } catch (err) {
       console.error('加载笔记失败:', err);
       elements.noteList.innerHTML = '<p class="placeholder">加载失败</p>';
@@ -332,7 +535,9 @@ const ExportModule = (function() {
    */
   function renderNotes() {
     const notes = StateManager?.getState?.('export.notes') || [];
-    const selected = StateManager?.getState?.('export.selectedNotes') || [];
+    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+    const noteCache = getNoteSelectionCache();
+    const cachedSelection = currentNotebook ? (noteCache[currentNotebook] || new Set()) : new Set();
     const query = searchQuery.notes.toLowerCase();
 
     // 当笔记本选择变化时自动加载笔记
@@ -355,7 +560,7 @@ const ExportModule = (function() {
 
     let html = '';
     filtered.forEach(note => {
-      const checked = selected.includes(note.guid) ? 'checked' : '';
+      const checked = cachedSelection.has(note.guid) ? 'checked' : '';
       const selectedClass = checked ? 'selected' : '';
       const date = new Date(note.updated).toLocaleDateString();
 
@@ -370,40 +575,62 @@ const ExportModule = (function() {
 
     elements.noteList.innerHTML = html;
 
-    // 更新笔记计数
+    // 更新笔记计数（只显示总数，选中数量在左侧笔记本旁显示）
     if (elements.noteCount) {
-      elements.noteCount.textContent = `(${notes.length} 篇)`;
+      elements.noteCount.textContent = notes.length > 0 ? `(${notes.length} 篇)` : '';
+    }
+
+    // 全选checkbox只在有搜索过滤时显示
+    if (elements.selectAllHeader) {
+      elements.selectAllHeader.style.display = searchQuery.notes ? 'block' : 'none';
     }
 
     // 绑定事件
     elements.noteList.querySelectorAll('.list-item[data-guid]').forEach(item => {
+      // 点击笔记项（不是 checkbox）切换选择
       item.addEventListener('click', (e) => {
         if (e.target.tagName !== 'INPUT') {
           const checkbox = item.querySelector('input');
           checkbox.checked = !checkbox.checked;
+          toggleNoteSelection(item.dataset.guid, checkbox.checked);
         }
-        toggleNoteSelection(item.dataset.guid, item.querySelector('input').checked);
       });
+
+      // 点击 checkbox 也触发选择
+      const checkbox = item.querySelector('input');
+      if (checkbox) {
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          toggleNoteSelection(item.dataset.guid, checkbox.checked);
+        });
+      }
     });
   }
 
   /**
    * 切换笔记选择
+   * @param {string} guid - 笔记 guid
+   * @param {boolean} checked - 是否选中
+   * @param {string} notebookGuid - 笔记所属笔记本（可选，从 note.notebookGuid 获取）
    */
-  function toggleNoteSelection(guid, checked) {
-    let selected = StateManager?.getState?.('export.selectedNotes') || [];
+  function toggleNoteSelection(guid, checked, notebookGuid = null) {
+    // 获取当前笔记本
+    const currentNotebook = notebookGuid || StateManager?.getState?.('export.currentNotebook');
+    if (!currentNotebook) return;
 
+    // 获取缓存
+    const noteCache = getNoteSelectionCache();
+    if (!noteCache[currentNotebook]) {
+      noteCache[currentNotebook] = new Set();
+    }
+
+    // 更新缓存
     if (checked) {
-      if (!selected.includes(guid)) {
-        selected.push(guid);
-      }
+      noteCache[currentNotebook].add(guid);
     } else {
-      selected = selected.filter(g => g !== guid);
+      noteCache[currentNotebook].delete(guid);
     }
-
-    if (StateManager) {
-      StateManager.setState('export.selectedNotes', selected);
-    }
+    saveNoteSelectionCache(noteCache);
 
     // 更新 UI
     const item = elements.noteList.querySelector(`[data-guid="${guid}"]`);
@@ -413,7 +640,55 @@ const ExportModule = (function() {
 
     // 更新全选框
     updateSelectAllState();
+    // 更新左侧笔记本的勾选状态
+    updateNotebookCheckboxState(currentNotebook);
+    // 更新当前笔记本名称显示
+    updateCurrentNotebookDisplay();
     updateUI();
+  }
+
+  /**
+   * 更新左侧笔记本的勾选状态（根据缓存的笔记选择）
+   */
+  function updateNotebookCheckboxState(notebookGuid) {
+    const noteCache = getNoteSelectionCache();
+    const cachedNotes = noteCache[notebookGuid] || new Set();
+    const currentNotes = StateManager?.getState?.('export.notes') || [];
+
+    // 获取当前笔记本的笔记
+    const notebookNotes = currentNotes.filter(n => n.notebookGuid === notebookGuid);
+
+    if (notebookNotes.length === 0) return; // 还没加载，不知道状态
+
+    const selectedCount = notebookNotes.filter(n => cachedNotes.has(n.guid)).length;
+
+    // 更新左侧笔记本显示
+    const notebookItem = elements.notebookList.querySelector(`.notebook-item[data-guid="${notebookGuid}"]`);
+    if (notebookItem) {
+      // 移除旧的 partial class
+      notebookItem.classList.remove('partial');
+
+      if (selectedCount > 0 && selectedCount < notebookNotes.length) {
+        notebookItem.classList.add('partial');
+        // 把 checkbox 替换成减号
+        const checkbox = notebookItem.querySelector('input[type="checkbox"]');
+        if (checkbox && !notebookItem.querySelector('.checkbox-partial')) {
+          checkbox.outerHTML = '<span class="checkbox-partial">&#8212;</span>';
+        }
+      } else if (selectedCount === notebookNotes.length) {
+        // 全选 - checkbox 应该勾选
+        const partial = notebookItem.querySelector('.checkbox-partial');
+        if (partial) {
+          partial.outerHTML = `<input type="checkbox" checked>`;
+        }
+      } else {
+        // 未选
+        const partial = notebookItem.querySelector('.checkbox-partial');
+        if (partial) {
+          partial.outerHTML = `<input type="checkbox">`;
+        }
+      }
+    }
   }
 
   /**
@@ -422,36 +697,80 @@ const ExportModule = (function() {
   function handleSelectAllNotes() {
     const notes = StateManager?.getState?.('export.notes') || [];
     const checked = elements.selectAllNotes.checked;
-    let selected = StateManager?.getState?.('export.selectedNotes') || [];
+    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
 
-    notes.forEach(note => {
-      if (checked) {
-        if (!selected.includes(note.guid)) {
-          selected.push(note.guid);
-        }
-      } else {
-        selected = selected.filter(g => g !== note.guid);
-      }
-    });
+    if (!currentNotebook) return;
 
-    if (StateManager) {
-      StateManager.setState('export.selectedNotes', selected);
+    // 获取缓存
+    const noteCache = getNoteSelectionCache();
+    if (!noteCache[currentNotebook]) {
+      noteCache[currentNotebook] = new Set();
     }
 
+    // 全选/取消全选当前笔记本的笔记
+    notes.forEach(note => {
+      if (note.notebookGuid === currentNotebook) {
+        if (checked) {
+          noteCache[currentNotebook].add(note.guid);
+        } else {
+          noteCache[currentNotebook].delete(note.guid);
+        }
+      }
+    });
+    saveNoteSelectionCache(noteCache);
+
     renderNotes();
+    // 更新左侧笔记本的勾选状态
+    updateNotebookCheckboxState(currentNotebook);
+    // 更新当前笔记本名称显示
+    updateCurrentNotebookDisplay();
     updateUI();
   }
 
   /**
-   * 更新全选框状态
+   * 更新全选框状态（根据当前笔记本的缓存）
    */
+  /**
+   * 更新当前笔记本名称显示
+   */
+  function updateCurrentNotebookDisplay() {
+    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+    const notebooks = StateManager?.getState?.('export.notebooks') || [];
+    const noteCache = getNoteSelectionCache();
+
+    if (!currentNotebook) {
+      if (elements.currentNotebookName) {
+        elements.currentNotebookName.textContent = '';
+      }
+      return;
+    }
+
+    const notebook = notebooks.find(nb => nb.guid === currentNotebook);
+    const selectedCount = noteCache[currentNotebook]?.size || 0;
+
+    if (elements.currentNotebookName) {
+      if (selectedCount > 0) {
+        elements.currentNotebookName.textContent = `${notebook?.name || ''} (已选择 ${selectedCount} 篇)`;
+      } else {
+        elements.currentNotebookName.textContent = notebook?.name || '';
+      }
+    }
+  }
+
   function updateSelectAllState() {
     const notes = StateManager?.getState?.('export.notes') || [];
-    const selected = StateManager?.getState?.('export.selectedNotes') || [];
+    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+    const noteCache = getNoteSelectionCache();
 
-    if (elements.selectAllNotes) {
-      elements.selectAllNotes.checked = notes.length > 0 && notes.every(note => selected.includes(note.guid));
-    }
+    if (!currentNotebook || !elements.selectAllNotes) return;
+
+    // 获取当前笔记本的笔记
+    const notebookNotes = notes.filter(n => n.notebookGuid === currentNotebook);
+    const cachedSelection = noteCache[currentNotebook] || new Set();
+
+    // 全选当且仅当：笔记数 > 0 且每条笔记都在缓存中
+    elements.selectAllNotes.checked = notebookNotes.length > 0 &&
+      notebookNotes.every(note => cachedSelection.has(note.guid));
   }
 
   /**
@@ -488,30 +807,34 @@ const ExportModule = (function() {
    */
   function updateUI() {
     const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
-    const selectedNotes = StateManager?.getState?.('export.selectedNotes') || [];
+    const noteCache = getNoteSelectionCache();
+    
+    // 计算所有笔记本缓存的选中笔记总数
+    let totalSelectedNotes = 0;
+    Object.values(noteCache).forEach(set => {
+      totalSelectedNotes += set.size;
+    });
 
-    const hasSelection = selectedNotebooks.length > 0 || selectedNotes.length > 0;
+    const hasSelection = selectedNotebooks.length > 0 || totalSelectedNotes > 0;
 
     // 更新导出按钮
     if (elements.exportBtn) {
       elements.exportBtn.disabled = !hasSelection;
 
       // 更新按钮文本
-      if (selectedNotebooks.length > 0 && selectedNotes.length > 0) {
-        elements.exportBtn.textContent = `导出选中 (${selectedNotebooks.length} 笔记本 + ${selectedNotes.length} 笔记)`;
+      if (selectedNotebooks.length > 0 && totalSelectedNotes > 0) {
+        elements.exportBtn.textContent = `导出选中 (${selectedNotebooks.length} 笔记本 + ${totalSelectedNotes} 笔记)`;
       } else if (selectedNotebooks.length > 0) {
         elements.exportBtn.textContent = `导出选中笔记本 (${selectedNotebooks.length})`;
-      } else if (selectedNotes.length > 0) {
-        elements.exportBtn.textContent = `导出选中笔记 (${selectedNotes.length})`;
+      } else if (totalSelectedNotes > 0) {
+        elements.exportBtn.textContent = `导出选中笔记 (${totalSelectedNotes})`;
       } else {
         elements.exportBtn.textContent = '导出选中';
       }
     }
 
-    // 当笔记本选择变化时，重新加载笔记
-    if (selectedNotebooks.length > 0) {
-      loadNotesForNotebooks();
-    }
+    // 注意：不再在这里自动加载笔记，避免覆盖右侧当前笔记本的显示
+    // 笔记加载由 loadNotesForNotebook() 单独处理
   }
 
   /**
@@ -519,17 +842,24 @@ const ExportModule = (function() {
    */
   async function handleExport() {
     const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
-    const selectedNotes = StateManager?.getState?.('export.selectedNotes') || [];
+    const noteCache = getNoteSelectionCache();
+    
+    // 计算所有选中的笔记
+    let selectedNoteGuids = [];
+    Object.values(noteCache).forEach(set => {
+      selectedNoteGuids.push(...Array.from(set));
+    });
+
     const imageFormat = document.querySelector('input[name="imageFormat"]:checked')?.value || 'obsidian';
 
-    if (selectedNotebooks.length === 0 && selectedNotes.length === 0) {
+    if (selectedNotebooks.length === 0 && selectedNoteGuids.length === 0) {
       showStatus('请先选择要导出的内容', 'error');
       return;
     }
 
     showProgressCard(true);
     updateProgress(0, '准备导出...');
-    UIModule?.log('INFO', `开始导出: 选择 ${selectedNotebooks.length} 个笔记本, ${selectedNotes.length} 篇笔记`);
+    UIModule?.log('INFO', `开始导出: 选择 ${selectedNotebooks.length} 个笔记本, ${selectedNoteGuids.length} 篇笔记`);
 
     try {
       if (selectedNotebooks.length > 0) {
@@ -544,18 +874,18 @@ const ExportModule = (function() {
         } else {
           UIModule?.log('ERROR', `API 返回异常: ${JSON.stringify(result)}`);
         }
-      } else if (selectedNotes.length > 0) {
+      } else if (selectedNoteGuids.length > 0) {
         // 逐个导出笔记
         let completed = 0;
         const errors = [];
 
-        for (const guid of selectedNotes) {
+        for (const guid of selectedNoteGuids) {
           try {
             await API.export.note(guid, imageFormat);
             completed++;
             updateProgress(
-              Math.floor((completed / selectedNotes.length) * 100),
-              `正在导出 (${completed}/${selectedNotes.length})`
+              Math.floor((completed / selectedNoteGuids.length) * 100),
+              `正在导出 (${completed}/${selectedNoteGuids.length})`
             );
           } catch (err) {
             errors.push({ guid, error: err.message });
