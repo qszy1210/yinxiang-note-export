@@ -401,6 +401,7 @@ const ExportModule = (function() {
     }
 
     updateUI();
+    updateExportModeHint();
   }
 
   /**
@@ -475,6 +476,7 @@ const ExportModule = (function() {
       console.error('加载笔记失败:', err);
       elements.noteList.innerHTML = '<p class="placeholder">加载失败</p>';
     }
+    updateExportModeHint();
   }
 
   /**
@@ -611,6 +613,7 @@ const ExportModule = (function() {
 
     renderNotebooks();
     updateUI();
+    updateExportModeHint();
   }
 
   /**
@@ -760,6 +763,7 @@ const ExportModule = (function() {
       let isRateLimit = err.message.includes('RATE_LIMIT_REACHED') || err.message.includes('限流');
       UIModule?.log('ERROR', `加载笔记失败${isRateLimit ? '（限流）' : ''}: ${err.message}`);
     }
+    updateExportModeHint();
   }
 
   /**
@@ -1019,6 +1023,24 @@ const ExportModule = (function() {
     // 全选当且仅当：笔记数 > 0 且每条笔记都在缓存中
     elements.selectAllNotes.checked = notebookNotes.length > 0 &&
       notebookNotes.every(note => cachedSelection.has(note.guid));
+  }
+
+  /**
+   * 更新导出模式提示文字
+   */
+  function updateExportModeHint() {
+    const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
+    const hintEl = document.getElementById('exportModeHint');
+
+    if (!hintEl) return;
+
+    if (selectedNotebooks.length > 0) {
+      hintEl.textContent = `已选 ${selectedNotebooks.length} 个笔记本（可取消勾选笔记排除）`;
+      hintEl.style.color = '#666';
+    } else {
+      hintEl.textContent = '请勾选要导出的笔记';
+      hintEl.style.color = '#999';
+    }
   }
 
   /**

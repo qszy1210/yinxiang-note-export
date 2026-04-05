@@ -150,6 +150,14 @@
   font-weight: normal;
 }
 
+/* 导出模式提示文字 */
+.export-mode-hint {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: #666;
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
   .export-layout {
