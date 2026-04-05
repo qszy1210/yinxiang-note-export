@@ -28,8 +28,6 @@ const ExportModule = (function() {
     elements.noteList = document.getElementById('noteList');
     elements.noteCount = document.getElementById('noteCount');
     elements.currentNotebookName = document.getElementById('currentNotebookName');
-    elements.selectAllNotes = document.getElementById('selectAllNotes');
-    elements.selectAllHeader = document.getElementById('selectAllHeader');
     elements.selectNotebooks = document.getElementById('selectNotebooks');
     elements.exportBtn = document.getElementById('exportSelectedBtn');
     elements.exportNotebookBtn = document.getElementById('exportNotebookBtn');
@@ -65,10 +63,6 @@ const ExportModule = (function() {
 
     if (elements.selectNotebooks) {
       elements.selectNotebooks.addEventListener('click', handleSelectAllNotebooks);
-    }
-
-    if (elements.selectAllNotes) {
-      elements.selectAllNotes.addEventListener('change', handleSelectAllNotes);
     }
 
     if (elements.exportBtn) {
@@ -809,11 +803,6 @@ const ExportModule = (function() {
       elements.noteCount.textContent = '';
     }
 
-    // 全选checkbox只在有搜索过滤时显示
-    if (elements.selectAllHeader) {
-      elements.selectAllHeader.style.display = searchQuery.notes ? 'block' : 'none';
-    }
-
     // 绑定事件
     elements.noteList.querySelectorAll('.list-item[data-guid]').forEach(item => {
       // 点击笔记项（不是 checkbox）切换选择
@@ -867,8 +856,6 @@ const ExportModule = (function() {
       item.classList.toggle('selected', checked);
     }
 
-    // 更新全选框
-    updateSelectAllState();
     // 更新左侧笔记本的勾选状态
     updateNotebookCheckboxState(currentNotebook);
     // 更新当前笔记本名称显示
@@ -944,45 +931,6 @@ const ExportModule = (function() {
   }
 
   /**
-   * 全选/取消全选笔记
-   */
-  function handleSelectAllNotes() {
-    const notes = StateManager?.getState?.('export.notes') || [];
-    const checked = elements.selectAllNotes.checked;
-    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
-
-    if (!currentNotebook) return;
-
-    // 获取缓存
-    const noteCache = getNoteSelectionCache();
-    if (!noteCache[currentNotebook]) {
-      noteCache[currentNotebook] = new Set();
-    }
-
-    // 全选/取消全选当前笔记本的笔记
-    notes.forEach(note => {
-      if (note.notebookGuid === currentNotebook) {
-        if (checked) {
-          noteCache[currentNotebook].add(note.guid);
-        } else {
-          noteCache[currentNotebook].delete(note.guid);
-        }
-      }
-    });
-    saveNoteSelectionCache(noteCache);
-
-    renderNotes();
-    // 更新左侧笔记本的勾选状态
-    updateNotebookCheckboxState(currentNotebook);
-    // 更新当前笔记本名称显示
-    updateCurrentNotebookDisplay();
-    updateUI();
-  }
-
-  /**
-   * 更新全选框状态（根据当前笔记本的缓存）
-   */
-  /**
    * 更新当前笔记本名称显示
    */
   function updateCurrentNotebookDisplay() {
@@ -1007,22 +955,6 @@ const ExportModule = (function() {
         elements.currentNotebookName.textContent = notebook?.name || '';
       }
     }
-  }
-
-  function updateSelectAllState() {
-    const notes = StateManager?.getState?.('export.notes') || [];
-    const currentNotebook = StateManager?.getState?.('export.currentNotebook');
-    const noteCache = getNoteSelectionCache();
-
-    if (!currentNotebook || !elements.selectAllNotes) return;
-
-    // 获取当前笔记本的笔记
-    const notebookNotes = notes.filter(n => n.notebookGuid === currentNotebook);
-    const cachedSelection = noteCache[currentNotebook] || new Set();
-
-    // 全选当且仅当：笔记数 > 0 且每条笔记都在缓存中
-    elements.selectAllNotes.checked = notebookNotes.length > 0 &&
-      notebookNotes.every(note => cachedSelection.has(note.guid));
   }
 
   /**
