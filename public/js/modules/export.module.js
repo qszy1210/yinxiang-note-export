@@ -197,7 +197,10 @@ const ExportModule = (function() {
     const currentNotes = StateManager?.getState?.('export.notes') || [];
     const noteCache = getNoteSelectionCache();
     const noteTotalCache = getNoteTotalCache();
+    const allNotebooksSelected = StateManager?.getState?.('export.allNotebooksSelected') || false;
     const query = searchQuery.notebooks.toLowerCase();
+
+    UIModule?.log('DEBUG', `[renderNotebooks] allNotebooksSelected=${allNotebooksSelected}, selectedNotebooks=[${selectedNotebooks.join(',')}], currentNotebook=${currentNotebook}, noteCache keys=[${Object.keys(noteCache).join(',')}], noteTotalCache keys=[${Object.keys(noteTotalCache).join(',')}]`);
 
     // 过滤笔记本
     const filtered = notebooks.filter(nb =>
@@ -297,6 +300,8 @@ const ExportModule = (function() {
       elements.selectNotebooks.checked = allSelected;
     }
 
+    UIModule?.log('DEBUG', `[renderNotebooks] 完成: allNotebooksSelected=${allNotebooksSelected}, 渲染了${filtered.length}个笔记本`);
+
     // 绑定事件
     elements.notebookList.querySelectorAll('.notebook-item[data-guid]').forEach(item => {
       item.addEventListener('click', (e) => {
@@ -378,7 +383,10 @@ const ExportModule = (function() {
    * 切换笔记本选择
    */
   function toggleNotebookSelection(guid, checked) {
+    const allNotebooksSelectedBefore = StateManager?.getState?.('export.allNotebooksSelected') || false;
     let selected = StateManager?.getState?.('export.selectedNotebooks') || [];
+
+    UIModule?.log('DEBUG', `[toggleNotebookSelection] guid=${guid}, checked=${checked}, allNotebooksSelectedBefore=${allNotebooksSelectedBefore}, selectedNotebooks=[${selected.join(',')}]`);
 
     if (checked) {
       if (!selected.includes(guid)) {
@@ -449,6 +457,10 @@ const ExportModule = (function() {
       renderNotebooks();
     }
 
+    const allNotebooksSelectedAfter = StateManager?.getState?.('export.allNotebooksSelected') || false;
+    const selectedAfter = StateManager?.getState?.('export.selectedNotebooks') || [];
+    UIModule?.log('DEBUG', `[toggleNotebookSelection] 完成: allNotebooksSelected=${allNotebooksSelectedAfter}, selectedNotebooks=[${selectedAfter.join(',')}]`);
+
     updateUI();
     updateExportModeHint();
   }
@@ -459,6 +471,7 @@ const ExportModule = (function() {
    * @param {boolean} selectAll - 是否全选该笔记本的笔记
    */
   async function loadNotesForNotebookWithSelection(guid, selectAll) {
+    UIModule?.log('DEBUG', `[loadNotesForNotebookWithSelection] guid=${guid}, selectAll=${selectAll}`);
     elements.noteList.innerHTML = '<p class="placeholder">加载中...</p>';
 
     // 设置当前查看的笔记本
@@ -589,6 +602,7 @@ const ExportModule = (function() {
    * 用于勾选非当前笔记本时，获取总数来显示 n/m
    */
   async function loadNotesForNotebookTotalOnly(notebookGuid) {
+    UIModule?.log('DEBUG', `[loadNotesForNotebookTotalOnly] guid=${notebookGuid}, _pendingNotebookSelection=${JSON.stringify(_pendingNotebookSelection)}`);
     try {
       const data = await API.notebooks.getNotes(notebookGuid);
 
@@ -596,25 +610,33 @@ const ExportModule = (function() {
         let notes = data.data.notes || [];
         notes.forEach(note => note.notebookGuid = notebookGuid);
 
+        UIModule?.log('DEBUG', `[loadNotesForNotebookTotalOnly] 获取到笔记: guid=${notebookGuid}, notes.length=${notes.length}`);
+
         // 保存笔记总数
         const noteTotalCache = getNoteTotalCache();
         noteTotalCache[notebookGuid] = notes.length;
         saveNoteTotalCache(noteTotalCache);
+
+        UIModule?.log('DEBUG', `[loadNotesForNotebookTotalOnly] 更新noteTotalCache: guid=${notebookGuid}, count=${notes.length}`);
 
         // 处理待执行的勾选操作
         if (_pendingNotebookSelection && _pendingNotebookSelection.guid === notebookGuid) {
           const pending = _pendingNotebookSelection;
           _pendingNotebookSelection = null;
 
+          UIModule?.log('DEBUG', `[loadNotesForNotebookTotalOnly] 执行待定勾选: pending=${JSON.stringify(pending)}`);
+
           if (pending.selected) {
             // 全选该笔记本的笔记
             const noteCache = getNoteSelectionCache();
             noteCache[notebookGuid] = new Set(notes.map(n => n.guid));
             saveNoteSelectionCache(noteCache);
+            UIModule?.log('DEBUG', `[loadNotesForNotebookTotalOnly] 已执行全选: guid=${notebookGuid}, noteCache[guid]=[${[...noteCache[notebookGuid]].join(',')}]`);
           }
         }
 
         // 更新左侧笔记本显示
+        UIModule?.log('DEBUG', `[loadNotesForNotebookTotalOnly] 调用renderNotebooks()`);
         renderNotebooks();
       }
     } catch (err) {
@@ -625,6 +647,8 @@ const ExportModule = (function() {
   function handleSelectAllNotebooks() {
     const notebooks = StateManager?.getState?.('export.notebooks') || [];
     const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
+
+    UIModule?.log('DEBUG', `[handleSelectAllNotebooks] 开始: notebooks.length=${notebooks.length}, selectedNotebooks.length=${selectedNotebooks.length}, selected=[${selectedNotebooks.join(',')}]`);
 
     // 判断是否是全部选中：selectedNotebooks 数量等于笔记本数量
     const allSelected = selectedNotebooks.length === notebooks.length;
@@ -830,6 +854,8 @@ const ExportModule = (function() {
     const cachedSelection = currentNotebook ? (noteCache[currentNotebook] || new Set()) : new Set();
     const query = searchQuery.notes.toLowerCase();
 
+    UIModule?.log('DEBUG', `[renderNotes] currentNotebook=${currentNotebook}, allNotebooksSelected=${allNotebooksSelected}, selectedNotebooks=[${selectedNotebooks.join(',')}], notes.length=${notes.length}, cachedSelection.size=${cachedSelection.size}, cachedSelection=[${[...cachedSelection].join(',')}]`);
+
     const filtered = notes.filter(note =>
       note.title.toLowerCase().includes(query)
     );
@@ -899,6 +925,10 @@ const ExportModule = (function() {
     const currentNotebook = notebookGuid || StateManager?.getState?.('export.currentNotebook');
     if (!currentNotebook) return;
 
+    const allNotebooksSelectedBefore = StateManager?.getState?.('export.allNotebooksSelected') || false;
+
+    UIModule?.log('DEBUG', `[toggleNoteSelection] guid=${guid}, checked=${checked}, currentNotebook=${currentNotebook}, allNotebooksSelectedBefore=${allNotebooksSelectedBefore}`);
+
     // 获取缓存
     const noteCache = getNoteSelectionCache();
     if (!noteCache[currentNotebook]) {
@@ -917,6 +947,9 @@ const ExportModule = (function() {
     if (StateManager) {
       StateManager.setState('export.allNotebooksSelected', false);
     }
+
+    const allNotebooksSelectedAfter = StateManager?.getState?.('export.allNotebooksSelected') || false;
+    UIModule?.log('DEBUG', `[toggleNoteSelection] 完成: allNotebooksSelected=${allNotebooksSelectedAfter}, noteCache[${currentNotebook}]=[${[...(noteCache[currentNotebook] || new Set())].join(',')}]`);
 
     // 更新 UI
     const item = elements.noteList.querySelector(`[data-guid="${guid}"]`);
