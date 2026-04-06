@@ -29,7 +29,7 @@ const ExportModule = (function() {
     elements.noteList = document.getElementById('noteList');
     elements.noteCount = document.getElementById('noteCount');
     elements.currentNotebookName = document.getElementById('currentNotebookName');
-    elements.selectNotebooks = document.getElementById('selectNotebooks');
+    elements.selectNotebooksBtn = document.getElementById('selectNotebooksBtn');
     elements.exportBtn = document.getElementById('exportSelectedBtn');
     elements.exportNotebookBtn = document.getElementById('exportNotebookBtn');
     elements.progressCard = document.getElementById('progressCard');
@@ -62,8 +62,8 @@ const ExportModule = (function() {
       elements.clearNoteSearch.addEventListener('click', clearNoteSearch);
     }
 
-    if (elements.selectNotebooks) {
-      elements.selectNotebooks.addEventListener('click', handleSelectAllNotebooks);
+    if (elements.selectNotebooksBtn) {
+      elements.selectNotebooksBtn.addEventListener('click', handleSelectAllNotebooks);
     }
 
     if (elements.exportBtn) {
@@ -307,10 +307,16 @@ const ExportModule = (function() {
 
     elements.notebookList.innerHTML = html;
 
-    // 同步全选 checkbox 状态
-    if (elements.selectNotebooks) {
+    // 更新全选按钮文字和状态
+    if (elements.selectNotebooksBtn) {
       const allSelected = selectedNotebooks.length === notebooks.length && notebooks.length > 0;
-      elements.selectNotebooks.checked = allSelected;
+      if (allSelected) {
+        elements.selectNotebooksBtn.textContent = '取消全选';
+        elements.selectNotebooksBtn.classList.add('btn-danger');
+      } else {
+        elements.selectNotebooksBtn.textContent = '全选';
+        elements.selectNotebooksBtn.classList.remove('btn-danger');
+      }
     }
 
     UIModule?.log('DEBUG', `[renderNotebooks] 完成: allNotebooksSelected=${allNotebooksSelected}, 渲染了${filtered.length}个笔记本`);
