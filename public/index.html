@@ -48,14 +48,12 @@
             <div class="card">
               <h2>选择笔记本</h2>
 
-              <!-- 添加刷新按钮区域 -->
+              <!-- 刷新按钮和全选按钮放一行 -->
               <div class="batch-actions" style="margin-bottom: 12px;">
                 <button id="loadNotebooksBtn" class="btn btn-secondary btn-small">加载笔记本</button>
+                <button type="button" id="selectNotebooksBtn" class="btn btn-secondary btn-small" style="display: none;">全选</button>
               </div>
 
-              <div class="list-header" id="notebookSelectAllHeader" style="display: none;">
-                <button type="button" id="selectNotebooksBtn" class="btn btn-secondary btn-small">全选</button>
-              </div>
               <div class="search-box">
                 <input type="text" id="notebookSearch" placeholder="搜索笔记本..." class="search-input">
                 <button type="button" id="clearNotebookSearch" class="search-clear" title="清除">&times;</button>

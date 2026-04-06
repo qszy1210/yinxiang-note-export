@@ -111,9 +111,9 @@ const ExportModule = (function() {
         }
         renderNotebooks();
 
-        // 显示全选 checkbox
-        if (elements.notebookSelectAllHeader) {
-          elements.notebookSelectAllHeader.style.display = 'block';
+        // 显示全选按钮
+        if (elements.selectNotebooksBtn) {
+          elements.selectNotebooksBtn.style.display = 'inline-block';
         }
 
         // 更新按钮文本为刷新
@@ -466,13 +466,8 @@ const ExportModule = (function() {
       delete noteTotalCache[guid];
       saveNoteTotalCache(noteTotalCache);
 
-      // 如果当前查看的就是这个笔记本，清空笔记选中状态但不删除笔记列表
-      if (currentNotebook === guid) {
-        // 清空选中状态后重新渲染笔记列表（显示为未勾选）
-        renderNotes();
-        updateCurrentNotebookDisplay();
-      }
-      // 更新左侧笔记本显示
+      // 只更新左侧笔记本显示，不要调用 renderNotes()
+      // 笔记的勾选状态是独立的，不应该因为取消勾选笔记本而改变
       renderNotebooks();
     }
 
