@@ -152,10 +152,11 @@
 
 /* 导出模式提示文字 */
 .export-mode-hint {
-  display: block;
-  margin-bottom: 10px;
+  display: inline;
+  margin-left: 10px;
   font-size: 0.85rem;
-  color: #666;
+  font-weight: normal;
+  color: #00a82d;
 }
 
 /* 响应式 */

@@ -989,10 +989,8 @@ const ExportModule = (function() {
 
     if (selectedNotebooks.length > 0) {
       hintEl.textContent = `已选 ${selectedNotebooks.length} 个笔记本（可取消勾选笔记排除）`;
-      hintEl.style.color = '#666';
     } else {
       hintEl.textContent = '请勾选要导出的笔记';
-      hintEl.style.color = '#999';
     }
   }
 
