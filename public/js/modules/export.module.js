@@ -534,8 +534,8 @@ const ExportModule = (function() {
       }
       saveNoteSelectionCache(noteCache);
 
-      // 更新显示
-      updateNotebookCheckboxState(guid);
+      // 更新显示（重新渲染整个笔记本列表以更新 n/m 数字）
+      renderNotebooks();
 
       // 如果当前查看的就是这个笔记本，更新右侧显示
       const currentNotebook = StateManager?.getState?.('export.currentNotebook');
