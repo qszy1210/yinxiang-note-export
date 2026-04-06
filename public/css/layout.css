@@ -9,6 +9,7 @@
   grid-template-columns: 340px 1fr;  /* 左栏固定 340px，右栏自适应 */
   gap: 20px;
   min-width: 700px;
+  align-items: start;
 }
 
 .export-sidebar {
@@ -21,6 +22,17 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* 统一卡片高度，让左右两侧大致一致 */
+.export-sidebar .card,
+.export-main .card {
+  flex-shrink: 0;
+}
+
+/* 左侧笔记本列表自适应高度 */
+.notebook-list {
+  height: 450px;
 }
 
 /* 笔记本多选样式 */
