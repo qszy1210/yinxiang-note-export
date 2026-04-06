@@ -956,6 +956,15 @@ const ExportModule = (function() {
     }
     saveNoteSelectionCache(noteCache);
 
+    // 如果勾选了笔记，自动把笔记本加入到 selectedNotebooks
+    if (checked) {
+      const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
+      if (!selectedNotebooks.includes(currentNotebook)) {
+        selectedNotebooks.push(currentNotebook);
+        StateManager?.setState?.('export.selectedNotebooks', selectedNotebooks);
+      }
+    }
+
     // 清除"全选"标志，因为用户正在单独操作笔记
     if (StateManager) {
       StateManager.setState('export.allNotebooksSelected', false);
