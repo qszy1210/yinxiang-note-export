@@ -892,6 +892,11 @@ const ExportModule = (function() {
     }
     saveNoteSelectionCache(noteCache);
 
+    // 清除"全选"标志，因为用户正在单独操作笔记
+    if (StateManager) {
+      StateManager.setState('export.allNotebooksSelected', false);
+    }
+
     // 更新 UI
     const item = elements.noteList.querySelector(`[data-guid="${guid}"]`);
     if (item) {
