@@ -321,7 +321,15 @@ const ExportModule = (function() {
         if (StateManager) {
           StateManager.setState('export.currentNotebook', guid);
         }
-        loadNotesForNotebook(guid);
+
+        // 如果笔记本已被选中或全选状态，加载笔记并全选
+        const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
+        const allNotebooksSelected = StateManager?.getState?.('export.allNotebooksSelected') || false;
+        if (selectedNotebooks.includes(guid) || allNotebooksSelected) {
+          loadNotesForNotebookWithSelection(guid, true);
+        } else {
+          loadNotesForNotebook(guid);
+        }
       });
     });
   }
