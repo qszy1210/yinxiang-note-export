@@ -662,6 +662,8 @@ const ExportModule = (function() {
     }
 
     renderNotebooks();
+    renderNotes();
+    updateUI();
     updateUI();
     updateExportModeHint();
   }
