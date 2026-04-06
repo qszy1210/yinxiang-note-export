@@ -258,8 +258,12 @@ const ExportModule = (function() {
     noStack.forEach(nb => {
       const status = notebookStatus[nb.guid] || 'none';
       const isCurrent = nb.guid === currentNotebook;
-      const selectedCount = noteCache[nb.guid]?.size || 0;
+      let selectedCount = noteCache[nb.guid]?.size || 0;
       const totalCount = noteTotalCache[nb.guid] || 0;
+      // 如果全选了，selectedCount 应该等于 totalCount（显示为全部选中）
+      if (allNotebooksSelected && selectedNotebooks.includes(nb.guid)) {
+        selectedCount = totalCount;
+      }
       html += createNotebookItem(nb, selectedNotebooks, false, isCurrent, status, selectedCount, totalCount);
     });
 
@@ -269,8 +273,12 @@ const ExportModule = (function() {
       stackNotebooks.forEach(nb => {
         const status = notebookStatus[nb.guid] || 'none';
         const isCurrent = nb.guid === currentNotebook;
-        const selectedCount = noteCache[nb.guid]?.size || 0;
+        let selectedCount = noteCache[nb.guid]?.size || 0;
         const totalCount = noteTotalCache[nb.guid] || 0;
+        // 如果全选了，selectedCount 应该等于 totalCount（显示为全部选中）
+        if (allNotebooksSelected && selectedNotebooks.includes(nb.guid)) {
+          selectedCount = totalCount;
+        }
         html += createNotebookItem(nb, selectedNotebooks, true, isCurrent, status, selectedCount, totalCount);
       });
     });
