@@ -231,7 +231,6 @@ const ExportModule = (function() {
     // 计算每个笔记本的勾选状态
     // notebookSelectionStatus: { [guid]: 'checked' | 'partial' | 'none' }
     // 判断依据：缓存中的选中数 vs 笔记总数
-    const allNotebooksSelected = StateManager?.getState?.('export.allNotebooksSelected') || false;
     const notebookStatus = {};
     filtered.forEach(nb => {
       // 如果点击了"全选笔记本"，所有笔记本都显示为勾选状态
