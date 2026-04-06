@@ -23,6 +23,7 @@ const ExportModule = (function() {
     elements.notebookSearch = document.getElementById('notebookSearch');
     elements.clearNotebookSearch = document.getElementById('clearNotebookSearch');
     elements.notebookList = document.getElementById('notebookList');
+    elements.notebookSelectAllHeader = document.getElementById('notebookSelectAllHeader');
     elements.noteSearch = document.getElementById('noteSearch');
     elements.clearNoteSearch = document.getElementById('clearNoteSearch');
     elements.noteList = document.getElementById('noteList');
@@ -109,6 +110,11 @@ const ExportModule = (function() {
           StateManager.setState('export.notebooks', data.data.notebooks);
         }
         renderNotebooks();
+
+        // 显示全选 checkbox
+        if (elements.notebookSelectAllHeader) {
+          elements.notebookSelectAllHeader.style.display = 'block';
+        }
 
         // 更新按钮文本为刷新
         if (elements.loadNotebooksBtn) {
@@ -284,6 +290,13 @@ const ExportModule = (function() {
     });
 
     elements.notebookList.innerHTML = html;
+
+    // 同步全选 checkbox 状态
+    if (elements.selectNotebooks) {
+      const allSelected = selectedNotebooks.length === notebooks.length && notebooks.length > 0;
+      elements.selectNotebooks.checked = allSelected;
+      elements.selectNotebooks.indeterminate = selectedNotebooks.length > 0 && selectedNotebooks.length < notebooks.length;
+    }
 
     // 绑定事件
     elements.notebookList.querySelectorAll('.notebook-item[data-guid]').forEach(item => {
