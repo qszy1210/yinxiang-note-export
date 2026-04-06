@@ -822,6 +822,8 @@ const ExportModule = (function() {
   function renderNotes() {
     const notes = StateManager?.getState?.('export.notes') || [];
     const currentNotebook = StateManager?.getState?.('export.currentNotebook');
+    const selectedNotebooks = StateManager?.getState?.('export.selectedNotebooks') || [];
+    const allNotebooksSelected = StateManager?.getState?.('export.allNotebooksSelected') || false;
     const noteCache = getNoteSelectionCache();
     const cachedSelection = currentNotebook ? (noteCache[currentNotebook] || new Set()) : new Set();
     const query = searchQuery.notes.toLowerCase();
@@ -837,9 +839,12 @@ const ExportModule = (function() {
       return;
     }
 
+    // 如果全选了当前笔记本，所有笔记都显示为勾选
+    const allNotesSelectedForCurrent = allNotebooksSelected && selectedNotebooks.includes(currentNotebook);
+
     let html = '';
     filtered.forEach(note => {
-      const checked = cachedSelection.has(note.guid) ? 'checked' : '';
+      const checked = allNotesSelectedForCurrent || cachedSelection.has(note.guid) ? 'checked' : '';
       const selectedClass = checked ? 'selected' : '';
       const date = new Date(note.updated).toLocaleDateString();
 
