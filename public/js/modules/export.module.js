@@ -404,9 +404,24 @@ const ExportModule = (function() {
 
     // 勾选/取消勾选左侧笔记本时
     if (checked) {
-      // 如果是当前笔记本，加载笔记并全选
+      // 如果是当前笔记本，且笔记已加载，只更新勾选状态
       if (currentNotebook === guid) {
-        loadNotesForNotebookWithSelection(guid, true);
+        const allNotes = StateManager?.getState?.('export.notes') || [];
+        const notebookNotes = allNotes.filter(n => n.notebookGuid === guid);
+        if (notebookNotes.length > 0) {
+          // 笔记已加载，直接全选
+          const noteCache = getNoteSelectionCache();
+          noteCache[guid] = new Set(notebookNotes.map(n => n.guid));
+          saveNoteSelectionCache(noteCache);
+          renderNotes();
+          updateNotebookCheckboxState(guid);
+          updateCurrentNotebookDisplay();
+          renderNotebooks();
+          updateUI();
+        } else {
+          // 笔记未加载，需要加载
+          loadNotesForNotebookWithSelection(guid, true);
+        }
       } else {
         // 如果不是当前笔记本，先标记为全选（但不知道总数，先不更新数字）
         // 然后异步加载笔记来获取总数
