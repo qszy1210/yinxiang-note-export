@@ -222,8 +222,15 @@ const ExportModule = (function() {
     // 计算每个笔记本的勾选状态
     // notebookSelectionStatus: { [guid]: 'checked' | 'partial' | 'none' }
     // 判断依据：缓存中的选中数 vs 笔记总数
+    const allNotebooksSelected = StateManager?.getState?.('export.allNotebooksSelected') || false;
     const notebookStatus = {};
     filtered.forEach(nb => {
+      // 如果点击了"全选笔记本"，所有笔记本都显示为勾选状态
+      if (allNotebooksSelected) {
+        notebookStatus[nb.guid] = 'checked';
+        return;
+      }
+
       const cached = noteCache[nb.guid] || new Set();
       const totalCount = noteTotalCache[nb.guid] || 0;
 
@@ -355,6 +362,8 @@ const ExportModule = (function() {
 
     if (StateManager) {
       StateManager.setState('export.selectedNotebooks', selected);
+      // 清除"全选"标记，因为用户正在单独操作某个笔记本
+      StateManager.setState('export.allNotebooksSelected', false);
     }
 
     // 更新 UI
@@ -581,6 +590,7 @@ const ExportModule = (function() {
       // 取消全选：清空所有笔记本和笔记的勾选状态
       if (StateManager) {
         StateManager.setState('export.selectedNotebooks', []);
+        StateManager.setState('export.allNotebooksSelected', false);
       }
       // 清空所有笔记本的笔记缓存
       const noteCache = getNoteSelectionCache();
@@ -603,9 +613,9 @@ const ExportModule = (function() {
       // 全选所有笔记本
       if (StateManager) {
         StateManager.setState('export.selectedNotebooks', notebooks.map(nb => nb.guid));
+        // 标记为全选状态，用于 UI 显示
+        StateManager.setState('export.allNotebooksSelected', true);
       }
-      // 注意：这里只选中笔记本，不自动选中笔记（因为需要加载）
-      // 如果当前有加载的笔记，这些笔记所属的笔记本已被选中，所以会显示为勾选状态
     }
 
     renderNotebooks();
