@@ -266,11 +266,18 @@ const ExportModule = (function() {
     noStack.forEach(nb => {
       const status = notebookStatus[nb.guid] || 'none';
       const isCurrent = nb.guid === currentNotebook;
-      let selectedCount = noteCache[nb.guid]?.size || 0;
+      const isSelected = selectedNotebooks.includes(nb.guid);
+      let selectedCount = 0;
       const totalCount = noteTotalCache[nb.guid] || 0;
-      // 如果全选了，selectedCount 应该等于 totalCount（显示为全部选中）
-      if (allNotebooksSelected && selectedNotebooks.includes(nb.guid)) {
-        selectedCount = totalCount;
+      // 只有当笔记本确实在 selectedNotebooks 中时才使用缓存的值
+      if (isSelected) {
+        if (allNotebooksSelected) {
+          // 全选模式：selectedCount 等于总数
+          selectedCount = totalCount;
+        } else {
+          // 非全选模式：使用 noteCache 中的实际选中数
+          selectedCount = noteCache[nb.guid]?.size || 0;
+        }
       }
       html += createNotebookItem(nb, selectedNotebooks, false, isCurrent, status, selectedCount, totalCount);
     });
@@ -281,11 +288,18 @@ const ExportModule = (function() {
       stackNotebooks.forEach(nb => {
         const status = notebookStatus[nb.guid] || 'none';
         const isCurrent = nb.guid === currentNotebook;
-        let selectedCount = noteCache[nb.guid]?.size || 0;
+        const isSelected = selectedNotebooks.includes(nb.guid);
+        let selectedCount = 0;
         const totalCount = noteTotalCache[nb.guid] || 0;
-        // 如果全选了，selectedCount 应该等于 totalCount（显示为全部选中）
-        if (allNotebooksSelected && selectedNotebooks.includes(nb.guid)) {
-          selectedCount = totalCount;
+        // 只有当笔记本确实在 selectedNotebooks 中时才使用缓存的值
+        if (isSelected) {
+          if (allNotebooksSelected) {
+            // 全选模式：selectedCount 等于总数
+            selectedCount = totalCount;
+          } else {
+            // 非全选模式：使用 noteCache 中的实际选中数
+            selectedCount = noteCache[nb.guid]?.size || 0;
+          }
         }
         html += createNotebookItem(nb, selectedNotebooks, true, isCurrent, status, selectedCount, totalCount);
       });
