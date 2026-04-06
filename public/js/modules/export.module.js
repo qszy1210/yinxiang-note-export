@@ -295,7 +295,6 @@ const ExportModule = (function() {
     if (elements.selectNotebooks) {
       const allSelected = selectedNotebooks.length === notebooks.length && notebooks.length > 0;
       elements.selectNotebooks.checked = allSelected;
-      elements.selectNotebooks.indeterminate = selectedNotebooks.length > 0 && selectedNotebooks.length < notebooks.length;
     }
 
     // 绑定事件
