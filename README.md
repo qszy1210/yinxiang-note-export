@@ -13,11 +13,28 @@
 | **Python** | >= 3.9（evernote-backup 需要） |
 | **evernote-backup** | 第三方同步工具（见下方安装） |
 
-## 快速开始
+## 核心流程
 
-整个流程只需 4 步，从零到拿到全部 Markdown 文件。
+导出分为 **三个阶段**，每个阶段的输出是下一个阶段的输入，**不能跳步**：
 
-### 第 1 步：安装工具
+```
+印象笔记云端                     本地 SQLite                    ENEX 文件                     Markdown
+    │                              │                             │                             │
+    │  ① evernote-backup sync      │  ② evernote-backup export   │  ③ export-enex.js           │
+    │  (从云端拉取最新笔记)         │  (生成每个笔记本的 .enex)    │  (解析 ENEX → MD + 图片)     │
+    ├─────────────────────────────→├────────────────────────────→├────────────────────────────→│
+    │                              │                             │                             │
+    │  en_backup.db                │  enex-backup/*.enex         │  exports/**/*.md            │
+```
+
+> **关键理解**：第③步只是把本地 ENEX 文件转为 Markdown，它不会从印象笔记拉取任何数据。
+> 如果印象笔记上有新增/修改的笔记，必须先跑①②刷新 ENEX 文件，再跑③。
+
+---
+
+## 快速开始（首次使用）
+
+### 0. 安装工具（只需一次）
 
 ```bash
 # 克隆本项目
@@ -25,41 +42,61 @@ git clone https://github.com/你的用户名/yinxiang-note-export.git
 cd yinxiang-note-export
 npm install
 
-# 安装 evernote-backup
-# macOS:
-brew install evernote-backup
-
-# 或通过 pip（所有平台）：
-pip install evernote-backup
+# 安装 evernote-backup（二选一）
+brew install evernote-backup   # macOS
+pip install evernote-backup    # 所有平台
 ```
 
-### 第 2 步：同步笔记到本地
+### 1. 同步 — 从印象笔记拉取数据
 
 ```bash
-# 登录印象笔记（中国版），用账号密码
+# 首次需要登录（后续 sync 不需要重复登录）
 evernote-backup init-db --backend china
 
-# 同步全部笔记（首次约需几分钟，后续增量同步很快）
+# 同步全部笔记到本地 en_backup.db
 evernote-backup sync
 ```
 
-> **提示**：如果你的印象笔记开启了两步验证，`init-db` 时终端会提示输入验证码。
+> 如果开启了两步验证，终端会提示输入验证码。
 
-### 第 3 步：导出为 ENEX 文件
+### 2. 导出 — 生成 ENEX 文件
 
 ```bash
-# 每个笔记本生成一个 .enex 文件
+# 从本地数据库导出，每个笔记本一个 .enex 文件
 evernote-backup export ./enex-backup/
 ```
 
-### 第 4 步：转换为 Markdown
+### 3. 转换 — ENEX 转为 Markdown
 
 ```bash
-# 一键转换（默认 Obsidian 格式，输出到 ./exports/）
+# 将 ENEX 文件转换为 Markdown + 图片/附件
 node scripts/export-enex.js ./enex-backup/
 ```
 
 完成！在 `exports/` 目录下查看你的全部笔记。
+
+---
+
+## 重新导出（印象笔记有更新时）
+
+当你在印象笔记上新增或修改了笔记，需要**按顺序跑完三步**才能得到最新的 Markdown：
+
+```bash
+# ① 增量同步（只拉取变化部分，通常几秒）
+evernote-backup sync
+
+# ② 重新生成 ENEX 文件
+rm -rf enex-backup && evernote-backup export ./enex-backup/
+
+# ③ 重新转换为 Markdown
+rm -rf exports && node scripts/export-enex.js ./enex-backup/
+```
+
+也可以一行搞定：
+
+```bash
+evernote-backup sync && rm -rf enex-backup && evernote-backup export ./enex-backup/ && rm -rf exports && node scripts/export-enex.js ./enex-backup/
+```
 
 ## 命令参数
 
@@ -182,13 +219,19 @@ Markdown + 图片/附件
 
 | 指标 | 数值 |
 |------|------|
-| ENEX 文件数 | 17 |
+| ENEX 文件数 | 20 |
 | 原始数据量 | 1.9 GB |
-| 笔记总数 | 3540 条 |
-| 转换耗时 | 68 秒 |
+| 笔记总数 | 3622 条 |
+| 转换耗时 | ~70 秒 |
 | 导出大小 | 1.4 GB |
 
 ## 常见问题
+
+<details>
+<summary><b>重新跑了第③步，但导出结果没变化？</b></summary>
+
+第③步只转换本地已有的 ENEX 文件。如果印象笔记有新增/修改内容，必须先跑第①②步刷新 ENEX 文件，再跑第③步。参见上方「重新导出」章节。
+</details>
 
 <details>
 <summary><b>evernote-backup sync 报错怎么办？</b></summary>
